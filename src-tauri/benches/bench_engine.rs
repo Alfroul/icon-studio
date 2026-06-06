@@ -46,6 +46,10 @@ fn make_small_project() -> IconProject {
         version: 0,
         pages: vec![],
         symbols: HashMap::new(),
+        active_page_index: 0,
+        adaptive: None,
+        brand_kits: vec![],
+        custom_style_presets: vec![],
     }
 }
 
@@ -204,6 +208,10 @@ fn make_medium_project() -> IconProject {
         version: 0,
         pages: vec![],
         symbols: HashMap::new(),
+        active_page_index: 0,
+        adaptive: None,
+        brand_kits: vec![],
+        custom_style_presets: vec![],
     }
 }
 
