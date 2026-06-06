@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegram/nicetauri/refs/heads/v2/core/tauri-config-schema/schema.json",
+  "productName": "IconStudio",
+  "version": "0.1.0",
+  "identifier": "com.iconstudio.app",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "IconStudio",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["iconproject", "iconproject.json"],
+        "name": "IconStudio Project",
+        "description": "IconStudio Icon Project",
+        "mimeType": "application/json"
+      },
+      {
+        "ext": ["svg"],
+        "name": "SVG Image",
+        "description": "Scalable Vector Graphics",
+        "mimeType": "image/svg+xml",
+        "role": "Viewer"
+      }
+    ]
+  }
+}
