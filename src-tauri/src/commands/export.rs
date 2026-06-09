@@ -1,4 +1,7 @@
 use crate::engine::builder::RenderCache;
+use crate::engine::codegen::{self, CodeExportOptions};
+use crate::engine::tokens::{self, TokenFormat};
+use crate::engine::fontgen::{self, FontExportOptions, GlyphEntry};
 use crate::error::AppError;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -130,4 +133,30 @@ pub fn export_all(
 
     crate::services::export::export_all_formats(&svg_str, &output_dir, &formats, &png_sizes)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_code(
+    svg_content: String,
+    options: CodeExportOptions,
+) -> Result<codegen::CodeExportResult, String> {
+    codegen::export_code(&svg_content, &options).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_tokens(
+    state: State<'_, super::canvas::ProjectState>,
+    format: TokenFormat,
+) -> Result<tokens::TokenExportResult, String> {
+    let project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    let tokens = tokens::extract_tokens(&project);
+    Ok(tokens::format_tokens(&tokens, format))
+}
+
+#[tauri::command]
+pub fn export_icon_font(
+    glyphs: Vec<GlyphEntry>,
+    options: FontExportOptions,
+) -> Result<fontgen::FontExportResult, String> {
+    fontgen::generate_font(&glyphs, &options).map_err(|e| e.to_string())
 }

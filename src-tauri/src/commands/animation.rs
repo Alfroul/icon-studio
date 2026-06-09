@@ -103,10 +103,11 @@ pub fn export_webp(
 pub fn export_lottie(
     state: State<'_, ProjectState>,
     output_path: String,
+    fps: Option<f64>,
 ) -> Result<String, String> {
     let json = {
         let project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
-        crate::engine::lottie::export_lottie(&project)?
+        crate::engine::lottie::export_lottie(&project, fps)?
     };
     if let Some(parent) = Path::new(&output_path).parent() {
         if !parent.as_os_str().is_empty() {

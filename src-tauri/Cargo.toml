@@ -35,6 +35,9 @@ tokio-tungstenite = "0.24"
 futures-util = "0.3"
 geo = "0.28"
 dirs = "6"
+regex = "1"
+# allsorts = "0.14"  # Stage 6: icon font generation (not needed for font generation, only parsing)
+flate2 = "1"         # Stage 6: WOFF zlib compression
 
 [dev-dependencies]
 tempfile = "3"

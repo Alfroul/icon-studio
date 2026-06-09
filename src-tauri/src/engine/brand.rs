@@ -59,7 +59,7 @@ fn closest_brand_color(
     let mut best_dist = f32::MAX;
     let mut best_color: Option<String> = None;
 
-    for (_, brand_hex) in brand_colors {
+    for brand_hex in brand_colors.values() {
         if let Some(brand_rgb) = parse_hex_to_srgb(brand_hex) {
             let brand_hsl: Hsl = Hsl::from_color(brand_rgb);
             let dist = hsl_distance(target_hsl, brand_hsl);

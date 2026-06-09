@@ -271,7 +271,7 @@ pub fn apply_style_preset(
     let before_next_id = project.next_element_id;
 
     engine_apply_style(&mut project, &element_id, &preset)
-        .map_err(|e| AppError::ValidationError(e))?;
+        .map_err(AppError::ValidationError)?;
 
     project.bump_version();
     let after = project.active_elements().to_vec();

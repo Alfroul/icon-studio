@@ -283,6 +283,30 @@ export const useElementsStore = defineStore("elements", () => {
     }
   }
 
+  async function cleanSvg(svg: string, rules?: string[]) {
+    try {
+      const result = await invoke<{
+        cleanedSvg: string;
+        rulesApplied: string[];
+        bytesBefore: number;
+        bytesAfter: number;
+      }>("optimize_svg", { svg, rules: rules || null });
+      const saved = result.bytesBefore - result.bytesAfter;
+      const pct = result.bytesBefore > 0
+        ? Math.round((saved / result.bytesBefore) * 100)
+        : 0;
+      ui.showToast(
+        `Cleaned: ${result.rulesApplied.length} rule(s), saved ${saved} bytes (${pct}%)`,
+        "success",
+      );
+      return result;
+    } catch (e) {
+      logError("cleanSvg", e);
+      ui.showToast(`Clean SVG failed: ${e}`, "error");
+      return null;
+    }
+  }
+
   async function groupElements(elementIds: string[]) {
     try {
       await invoke("group_elements", { elementIds });
@@ -377,5 +401,6 @@ export const useElementsStore = defineStore("elements", () => {
     clearMask,
     booleanOp,
     convertToPath,
+    cleanSvg,
   };
 });

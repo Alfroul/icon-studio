@@ -30,6 +30,7 @@ const panels = [
   { id: "templates", icon: "layoutDashboard", label: "Templates" },
   { id: "export", icon: "upload", label: "Export" },
   { id: "settings", icon: "settings", label: "Settings" },
+  { id: "history", icon: "clock", label: "History" },
 ];
 
 const tabRefs = ref<HTMLElement[]>([]);

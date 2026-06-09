@@ -17,6 +17,8 @@ const exportFormat = ref("png");
 const exportDir = ref("");
 const showExportDialog = ref(false);
 const showAddDialog = ref(false);
+const showFontDialog = ref(false);
+const fontExportDir = ref("");
 
 onMounted(() => {
   store.loadSets();
@@ -80,6 +82,20 @@ async function runExport() {
   if (!exportDir.value.trim()) return;
   await store.exportSet(exportFormat.value, undefined, exportDir.value.trim());
   showExportDialog.value = false;
+}
+
+async function runFontExport() {
+  if (!fontExportDir.value.trim() || !store.activeSetId) return;
+  const dir = fontExportDir.value.trim();
+  try {
+    const paths = await store.exportSet("font", undefined, dir);
+    if (paths && paths.length > 0) {
+      alert(`Exported ${paths.length} font files`);
+    }
+  } catch (e) {
+    console.error("Font export failed", e);
+  }
+  showFontDialog.value = false;
 }
 
 function toggleTag(tag: string) {
@@ -154,6 +170,13 @@ function issueSeverity(issue: ConsistencyIssue): string {
               @click="showExportDialog = true"
             >
               Export
+            </button>
+            <button
+              class="btn-secondary btn-sm"
+              @click="showFontDialog = true"
+              title="Export as icon font"
+            >
+              Font
             </button>
           </div>
         </div>
@@ -300,6 +323,24 @@ function issueSeverity(issue: ConsistencyIssue): string {
             Cancel
           </button>
           <button class="btn-primary" @click="runExport">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Font export dialog -->
+    <div v-if="showFontDialog" class="dialog-overlay" @click.self="showFontDialog = false">
+      <div class="dialog">
+        <h4>Export as Icon Font</h4>
+        <input
+          v-model="fontExportDir"
+          class="input"
+          placeholder="Output directory..."
+        />
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="showFontDialog = false">
+            Cancel
+          </button>
+          <button class="btn-primary" @click="runFontExport">Export Font</button>
         </div>
       </div>
     </div>

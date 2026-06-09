@@ -9,6 +9,9 @@ pub trait Command: Send {
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String>;
     fn undo(&mut self, project: &mut IconProject) -> Result<(), String>;
     fn as_any(&self) -> &dyn std::any::Any;
+    fn label(&self) -> String {
+        "Unknown".to_string()
+    }
 }
 
 /// A batch of commands that undo/redo as a single unit.
@@ -121,6 +124,12 @@ impl CommandHistory {
         self.snapshot_count = 0;
     }
 
+    pub fn history_labels(&self) -> (Vec<String>, Vec<String>) {
+        let undo_labels: Vec<String> = self.undo_stack.iter().map(|c| c.label()).collect();
+        let redo_labels: Vec<String> = self.redo_stack.iter().rev().map(|c| c.label()).collect();
+        (undo_labels, redo_labels)
+    }
+
     pub fn record(&mut self, cmd: Box<dyn Command>) {
         if let Some(ref mut batch) = self.pending_batch {
             batch.entries.push(cmd);
@@ -195,6 +204,7 @@ struct BatchCommand {
 }
 
 impl Command for BatchCommand {
+    fn label(&self) -> String { "Batch Operation".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         let elements_backup = project.active_elements().to_vec();
         let next_id_backup = project.next_element_id;
@@ -235,6 +245,7 @@ impl AddElementCommand {
 }
 
 impl Command for AddElementCommand {
+    fn label(&self) -> String { "Add Element".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         project.active_elements_mut().push(self.element.clone());
         Ok(())
@@ -261,6 +272,7 @@ impl RemoveElementCommand {
 }
 
 impl Command for RemoveElementCommand {
+    fn label(&self) -> String { "Remove Element".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         let elements = project.active_elements_mut();
         if self.index < elements.len() {
@@ -306,6 +318,7 @@ impl SetPropsCommand {
 }
 
 impl Command for SetPropsCommand {
+    fn label(&self) -> String { "Edit Properties".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         apply_props(project, &self.element_id, &self.new_props)
     }
@@ -383,6 +396,7 @@ impl ReorderCommand {
 }
 
 impl Command for ReorderCommand {
+    fn label(&self) -> String { "Reorder".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         move_element(project, self.old_index, self.new_index)
     }
@@ -427,6 +441,7 @@ impl SnapshotCommand {
 }
 
 impl Command for SnapshotCommand {
+    fn label(&self) -> String { "Snapshot".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         *project.active_elements_mut() = self.after.clone();
         project.next_element_id = self.after_next_id;
@@ -455,6 +470,7 @@ impl SetGradientCommand {
 }
 
 impl Command for SetGradientCommand {
+    fn label(&self) -> String { "Change Gradient".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         let elem = find_element_deep_mut(project.active_elements_mut(), &self.element_id)
             .ok_or_else(|| format!("Element {} not found", self.element_id))?;
@@ -485,6 +501,7 @@ impl SetShadowCommand {
 }
 
 impl Command for SetShadowCommand {
+    fn label(&self) -> String { "Change Shadow".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         let elem = find_element_deep_mut(project.active_elements_mut(), &self.element_id)
             .ok_or_else(|| format!("Element {} not found", self.element_id))?;
@@ -515,6 +532,7 @@ impl SetFilterCommand {
 }
 
 impl Command for SetFilterCommand {
+    fn label(&self) -> String { "Change Filter".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         let elem = find_element_deep_mut(project.active_elements_mut(), &self.element_id)
             .ok_or_else(|| format!("Element {} not found", self.element_id))?;
@@ -544,6 +562,7 @@ impl CanvasCommand {
 }
 
 impl Command for CanvasCommand {
+    fn label(&self) -> String { "Edit Canvas".to_string() }
     fn execute(&mut self, project: &mut IconProject) -> Result<(), String> {
         *project.active_canvas_mut() = self.new_canvas.clone();
         Ok(())

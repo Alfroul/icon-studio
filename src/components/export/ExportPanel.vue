@@ -10,6 +10,77 @@ const store = useExportStore();
 const ui = useUiStore();
 const project = useProjectStore();
 
+// Code export settings
+const codeFormat = ref<string>('reactTs');
+const codeComponentName = ref<string>('MyIcon');
+const codeParametrizeFill = ref(true);
+const codePreview = ref<string>('');
+const codePreviewVisible = ref(false);
+
+const CODE_FORMATS = [
+  { value: 'reactTs', label: 'React TS', ext: '.tsx' },
+  { value: 'vueTs', label: 'Vue TS', ext: '.vue' },
+  { value: 'swiftUI', label: 'SwiftUI', ext: '.swift' },
+  { value: 'flutter', label: 'Flutter', ext: '.dart' },
+];
+
+async function generateCodePreview() {
+  const svg = project.svgPreview;
+  if (!svg) {
+    ui.showToast('No SVG content', 'warning');
+    return;
+  }
+  const result = await store.exportCode(
+    svg,
+    codeComponentName.value,
+    codeFormat.value,
+    24,
+    codeParametrizeFill.value,
+  );
+  if (result) {
+    codePreview.value = result.code;
+    codePreviewVisible.value = true;
+  }
+}
+
+async function copyCode() {
+  if (!codePreview.value) {
+    await generateCodePreview();
+  }
+  if (codePreview.value) {
+    try {
+      await navigator.clipboard.writeText(codePreview.value);
+      ui.showToast('Code copied to clipboard', 'success');
+    } catch (e: unknown) {
+      ui.showToast(`Failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    }
+  }
+}
+
+async function downloadCodeFile() {
+  const svg = project.svgPreview;
+  if (!svg) {
+    ui.showToast('No SVG content', 'warning');
+    return;
+  }
+  const result = await store.exportCode(
+    svg,
+    codeComponentName.value,
+    codeFormat.value,
+    24,
+    codeParametrizeFill.value,
+  );
+  if (result) {
+    const blob = new Blob([result.code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = result.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Animation export settings
 const lottieFps = ref(30);
 const gifFps = ref(15);
@@ -124,6 +195,105 @@ async function copySvgForFigma() {
   }
 }
 
+// Token export settings
+const tokenFormat = ref<string>('cssVariables');
+const tokenPreview = ref<string>('');
+const tokenVisible = ref(false);
+
+// Icon Font export settings
+const fontVisible = ref(false);
+const fontName = ref('MyIcons');
+const fontFormats = ref<string[]>(['ttf', 'woff']);
+const fontIncludeCss = ref(true);
+const fontIncludeDemo = ref(true);
+const fontUnicodeStart = ref('E000');
+
+const FONT_FORMAT_OPTIONS = [
+  { value: 'ttf', label: 'TTF' },
+  { value: 'woff', label: 'WOFF' },
+];
+
+function toggleFontFormat(fmt: string) {
+  const idx = fontFormats.value.indexOf(fmt);
+  if (idx >= 0) fontFormats.value.splice(idx, 1);
+  else fontFormats.value.push(fmt);
+}
+
+async function handleExportIconFont() {
+  if (!project.svgPreview) {
+    ui.showToast('No SVG content', 'warning');
+    return;
+  }
+  const unicodeVal = parseInt(fontUnicodeStart.value, 16) || 0xe000;
+  const glyphs = [{
+    iconName: 'icon',
+    unicode: String.fromCodePoint(unicodeVal),
+    svgPathData: project.svgPreview,
+  }];
+  const result = await store.exportIconFont(
+    glyphs,
+    fontName.value,
+    fontFormats.value,
+    fontIncludeCss.value,
+    fontIncludeDemo.value,
+    unicodeVal,
+  );
+  if (result && result.files.length > 0) {
+    // Download each file
+    for (const [filename, data] of result.files) {
+      const blob = new Blob([new Uint8Array(data)], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    ui.showToast(`Exported ${result.files.length} font files`, 'success');
+  }
+}
+
+const TOKEN_FORMATS = [
+  { value: 'cssVariables', label: 'CSS Variables', ext: '.css' },
+  { value: 'jsonDtcg', label: 'JSON (DTCG)', ext: '.json' },
+  { value: 'scssVariables', label: 'SCSS Variables', ext: '.scss' },
+  { value: 'tailwindConfig', label: 'Tailwind Config', ext: '.js' },
+];
+
+async function generateTokenPreview() {
+  const result = await store.exportTokens(tokenFormat.value);
+  if (result) {
+    tokenPreview.value = result.content;
+  }
+}
+
+async function copyTokens() {
+  if (!tokenPreview.value) {
+    await generateTokenPreview();
+  }
+  if (tokenPreview.value) {
+    try {
+      await navigator.clipboard.writeText(tokenPreview.value);
+      ui.showToast('Tokens copied to clipboard', 'success');
+    } catch (e: unknown) {
+      ui.showToast(`Failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    }
+  }
+}
+
+async function downloadTokenFile() {
+  const result = await store.exportTokens(tokenFormat.value);
+  if (result) {
+    const blob = new Blob([result.content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = result.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Presets
 const PRESETS_KEY = 'iconstudio-export-presets';
 
@@ -182,6 +352,7 @@ async function handleExportLottie() {
   try {
     const path = await invoke<string>("export_lottie", {
       outputPath: `${store.outputDir}/animation.json`,
+      fps: lottieFps.value,
     });
     store.exportResults = [path];
   } catch (e: unknown) {
@@ -304,6 +475,103 @@ loadPresets();
 
         <div class="anim-export-divider"></div>
 
+        <label class="checkbox-row code-toggle" @click.prevent="codePreviewVisible = !codePreviewVisible">
+          <input type="checkbox" :checked="codePreviewVisible" @click.prevent />
+          <span class="checkbox-label">Code</span>
+          <span class="tag">React / Vue / Swift / Flutter</span>
+        </label>
+
+        <div v-if="codePreviewVisible" class="code-export-section">
+          <div class="code-field">
+            <label class="code-label">Component Name</label>
+            <input v-model="codeComponentName" class="code-input" placeholder="MyIcon" />
+          </div>
+          <div class="code-field">
+            <label class="code-label">Format</label>
+            <select v-model="codeFormat" class="code-select">
+              <option v-for="fmt in CODE_FORMATS" :key="fmt.value" :value="fmt.value">{{ fmt.label }} ({{ fmt.ext }})</option>
+            </select>
+          </div>
+          <label class="checkbox-row code-option">
+            <input type="checkbox" v-model="codeParametrizeFill" />
+            <span class="checkbox-label">Parametrize fill → currentColor</span>
+          </label>
+          <div class="code-actions">
+            <button class="action-btn" @click="generateCodePreview">Preview</button>
+            <button class="action-btn" @click="copyCode">Copy Code</button>
+            <button class="action-btn" @click="downloadCodeFile">Download</button>
+          </div>
+          <div v-if="codePreview" class="code-preview">
+            <pre><code>{{ codePreview }}</code></pre>
+          </div>
+        </div>
+
+        <label class="checkbox-row code-toggle" @click.prevent="tokenVisible = !tokenVisible">
+          <input type="checkbox" :checked="tokenVisible" @click.prevent />
+          <span class="checkbox-label">Tokens</span>
+          <span class="tag">CSS / JSON / SCSS / TW</span>
+        </label>
+
+        <div v-if="tokenVisible" class="code-export-section">
+          <div class="code-field">
+            <label class="code-label">Format</label>
+            <select v-model="tokenFormat" class="code-select">
+              <option v-for="fmt in TOKEN_FORMATS" :key="fmt.value" :value="fmt.value">{{ fmt.label }} ({{ fmt.ext }})</option>
+            </select>
+          </div>
+          <div class="code-actions">
+            <button class="action-btn" @click="generateTokenPreview">Preview</button>
+            <button class="action-btn" @click="copyTokens">Copy</button>
+            <button class="action-btn" @click="downloadTokenFile">Download</button>
+          </div>
+          <div v-if="tokenPreview" class="code-preview">
+            <pre><code>{{ tokenPreview }}</code></pre>
+          </div>
+        </div>
+
+        <label class="checkbox-row code-toggle" @click.prevent="fontVisible = !fontVisible">
+          <input type="checkbox" :checked="fontVisible" @click.prevent />
+          <span class="checkbox-label">Icon Font</span>
+          <span class="tag">TTF / WOFF</span>
+        </label>
+
+        <div v-if="fontVisible" class="code-export-section">
+          <div class="code-field">
+            <label class="code-label">Font Name</label>
+            <input v-model="fontName" class="code-input" placeholder="MyIcons" />
+          </div>
+          <div class="code-field">
+            <label class="code-label">Formats</label>
+            <div class="font-format-chips">
+              <label
+                v-for="fmt in FONT_FORMAT_OPTIONS"
+                :key="fmt.value"
+                :class="['size-chip', { active: fontFormats.includes(fmt.value) }]"
+                @click="toggleFontFormat(fmt.value)"
+              >
+                {{ fmt.label }}
+              </label>
+            </div>
+          </div>
+          <div class="code-field">
+            <label class="code-label">Unicode Start</label>
+            <input v-model="fontUnicodeStart" class="code-input" placeholder="E000" style="width:80px;flex:none" />
+          </div>
+          <label class="checkbox-row code-option">
+            <input type="checkbox" v-model="fontIncludeCss" />
+            <span class="checkbox-label">Include CSS</span>
+          </label>
+          <label class="checkbox-row code-option">
+            <input type="checkbox" v-model="fontIncludeDemo" />
+            <span class="checkbox-label">Include Demo HTML</span>
+          </label>
+          <div class="code-actions">
+            <button class="action-btn" @click="handleExportIconFont">Export Font</button>
+          </div>
+        </div>
+
+        <div class="anim-export-divider"></div>
+
         <div class="anim-export-row">
           <button
             class="pack-btn"
@@ -314,7 +582,7 @@ loadPresets();
             Lottie JSON
           </button>
         </div>
-        <div v-if="true" class="anim-settings">
+        <div class="anim-settings">
           <label class="setting-row">
             <span class="setting-label">FPS</span>
             <select v-model.number="lottieFps" class="setting-select">
@@ -972,5 +1240,97 @@ loadPresets();
 
 .setting-select:focus {
   border-color: var(--accent);
+}
+
+/* Code export section */
+.code-export-section {
+  margin-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.code-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.code-input {
+  flex: 1;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition-fast) ease;
+}
+
+.code-input:focus {
+  border-color: var(--accent);
+}
+
+.code-select {
+  flex: 1;
+  height: 26px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+}
+
+.code-select:focus {
+  border-color: var(--accent);
+}
+
+.code-option {
+  padding: 2px 0;
+}
+
+.code-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.font-format-chips {
+  display: flex;
+  gap: 4px;
+}
+
+.code-preview {
+  margin-top: 4px;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+}
+
+.code-preview pre {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  font-family: "JetBrains Mono", monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

@@ -1,3 +1,4 @@
+use crate::engine::optimizer::{self, CleanRule};
 use crate::error::AppError;
 use crate::model::{Canvas, ExportConfig, IconProject};
 use crate::services::websocket;
@@ -144,4 +145,13 @@ pub fn import_svg_file(
     drop(guard);
     let _ = app_handle.emit("project-changed", ());
     Ok(result)
+}
+
+#[tauri::command]
+pub fn optimize_svg(
+    svg: String,
+    rules: Option<Vec<CleanRule>>,
+) -> Result<optimizer::CleanResult, String> {
+    let rules = rules.unwrap_or_else(optimizer::default_rules);
+    optimizer::clean_svg(&svg, &rules).map_err(|e| e.to_string())
 }

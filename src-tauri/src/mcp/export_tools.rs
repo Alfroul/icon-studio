@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use super::{internal_err, invalid_params, state_err, IconStudioHandler};
+use crate::engine::codegen::{self, CodeExportOptions, CodeFormat};
 use crate::engine::exporter;
+use crate::engine::tokens::{self, TokenFormat};
 use crate::engine::variation::{self, VariationConfig};
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -374,6 +376,69 @@ impl IconStudioHandler {
             exported.join("\n")
         ))]))
     }
+
+    #[tool(name = "export_code", description = "Export current icon as framework component code (React TS, Vue TS, SwiftUI, Flutter)")]
+    async fn export_code(
+        &self,
+        Parameters(params): Parameters<ExportCodeParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let svg_str = {
+            let project = self.project.lock().map_err(state_err)?;
+            let mut cache = self.cache.lock().map_err(state_err)?;
+            crate::services::export::build_svg(&project, &mut cache)
+                .map_err(|e| internal_err(format!("Build error: {}", e)))?
+        };
+
+        let format = match params.format.as_str() {
+            "reactTs" => CodeFormat::ReactTs,
+            "vueTs" => CodeFormat::VueTs,
+            "swiftUI" => CodeFormat::SwiftUI,
+            "flutter" => CodeFormat::Flutter,
+            other => return Err(invalid_params(format!(
+                "Unknown format '{}'. Valid: reactTs, vueTs, swiftUI, flutter", other
+            ))),
+        };
+
+        let options = CodeExportOptions {
+            component_name: params.component_name,
+            format,
+            size: params.size,
+            parametrize_fill: params.parametrize_fill,
+        };
+
+        let result = codegen::export_code(&svg_str, &options)
+            .map_err(|e| internal_err(format!("Code export error: {}", e)))?;
+
+        Ok(CallToolResult::success(vec![
+            Content::text(format!("Generated {} ({} bytes)\n\n{}", result.filename, result.code.len(), result.code)),
+        ]))
+    }
+
+    #[tool(name = "export_tokens", description = "Export design tokens from current project (CSS Variables, JSON DTCG, SCSS, Tailwind Config)")]
+    async fn export_tokens(
+        &self,
+        Parameters(params): Parameters<ExportTokensParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let format = match params.format.as_str() {
+            "cssVariables" => TokenFormat::CssVariables,
+            "jsonDtcg" => TokenFormat::JsonDtcg,
+            "scssVariables" => TokenFormat::ScssVariables,
+            "tailwindConfig" => TokenFormat::TailwindConfig,
+            other => return Err(invalid_params(format!(
+                "Unknown format '{}'. Valid: cssVariables, jsonDtcg, scssVariables, tailwindConfig", other
+            ))),
+        };
+
+        let result = {
+            let project = self.project.lock().map_err(state_err)?;
+            let tokens = tokens::extract_tokens(&project);
+            tokens::format_tokens(&tokens, format)
+        };
+
+        Ok(CallToolResult::success(vec![
+            Content::text(format!("{} ({} bytes)\n\n{}", result.filename, result.content.len(), result.content)),
+        ]))
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -388,4 +453,27 @@ pub struct PresetVariationsParams {
     pub preset: String,
     #[schemars(description = "Output directory (default: ./variations)")]
     pub output_dir: Option<String>,
+}
+
+fn default_size() -> u32 { 24 }
+fn default_parametrize_fill() -> bool { true }
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct ExportCodeParams {
+    #[schemars(description = "Component name in PascalCase (e.g. HomeIcon)")]
+    pub component_name: String,
+    #[schemars(description = "Target framework: reactTs, vueTs, swiftUI, flutter")]
+    pub format: String,
+    #[schemars(description = "Default size in pixels")]
+    #[serde(default = "default_size")]
+    pub size: u32,
+    #[schemars(description = "Replace fill colors with currentColor")]
+    #[serde(default = "default_parametrize_fill")]
+    pub parametrize_fill: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct ExportTokensParams {
+    #[schemars(description = "Token format: cssVariables, jsonDtcg, scssVariables, tailwindConfig")]
+    pub format: String,
 }

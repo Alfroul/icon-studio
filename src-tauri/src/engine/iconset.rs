@@ -1,5 +1,6 @@
 use crate::engine::builder;
 use crate::engine::exporter;
+use crate::engine::fontgen::{self, FontExportOptions, FontFormat, GlyphEntry};
 use crate::error::AppError;
 use crate::model::{ConsistencyIssue, Element, IconProject, IconSet, SetEntry};
 use rayon::prelude::*;
@@ -158,6 +159,11 @@ pub fn export_set(
     fs::create_dir_all(&out)
         .map_err(|e| AppError::ExportError(format!("Failed to create output dir: {}", e)))?;
 
+    // Font export uses a different pipeline — handle separately
+    if format == "font" {
+        return export_set_as_font(&set, &out);
+    }
+
     let results: Vec<Result<Vec<PathBuf>, AppError>> = set.entries
         .par_iter()
         .map(|entry| {
@@ -209,6 +215,39 @@ pub fn export_set(
     Ok(all_files)
 }
 
+fn export_set_as_font(set: &IconSet, out: &Path) -> Result<Vec<PathBuf>, AppError> {
+    let mut glyphs: Vec<GlyphEntry> = Vec::new();
+
+    for (code, entry) in (0xE000u32..).zip(set.entries.iter()) {
+        let project = load_project_from_path(&entry.project_path)?;
+        let svg_str = builder::build(&project)?;
+        let name = sanitize_filename(&entry.name);
+        glyphs.push(GlyphEntry {
+            icon_name: name,
+            unicode: char::from_u32(code).unwrap_or('\u{E000}'),
+            svg_path_data: svg_str,
+        });
+    }
+
+    let options = FontExportOptions {
+        font_name: set.name.clone(),
+        formats: vec![FontFormat::Ttf, FontFormat::Woff],
+        include_css: true,
+        include_demo: true,
+        unicode_start: 0xE000,
+    };
+
+    let result = fontgen::generate_font(&glyphs, &options)?;
+    let mut files = Vec::new();
+    for (filename, data) in result.files {
+        let path = out.join(&filename);
+        fs::write(&path, data)
+            .map_err(|e| AppError::ExportError(format!("Write failed: {}", e)))?;
+        files.push(path);
+    }
+    Ok(files)
+}
+
 /// Consistency report returned by check_consistency.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SetConsistencyReport {
@@ -238,7 +277,7 @@ pub fn check_consistency(set_id: &str) -> Result<SetConsistencyReport, AppError>
     for entry in &set.entries {
         if let Ok(project) = load_project_from_path(&entry.project_path) {
             collect_element_stats(
-                &project.active_elements(),
+                project.active_elements(),
                 &entry.name,
                 &mut all_stroke_widths,
                 &mut all_border_radii,
@@ -298,7 +337,7 @@ pub fn search_entries(query: &str, tags: Option<&Vec<String>>, set_id: Option<&s
     for set in &sets {
         for entry in &set.entries {
             // If tags filter is provided, entry must match all required tags
-            let tag_filter_ok = tags.map_or(true, |required_tags| {
+            let tag_filter_ok = tags.is_none_or(|required_tags| {
                 required_tags.iter().all(|t| {
                     entry.tags.iter().any(|et| et.to_lowercase() == t.to_lowercase())
                 })
@@ -373,7 +412,7 @@ fn generate_thumbnail_svg(svg_str: &str, size: u32) -> Result<String, AppError> 
 
 fn base64_encode(data: &[u8]) -> String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };

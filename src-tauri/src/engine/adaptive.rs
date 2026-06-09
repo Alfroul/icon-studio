@@ -185,9 +185,11 @@ fn build_layer_svg(
         element_ids.iter().map(|s| s.as_str()).collect();
 
     // Build a temporary project with only the filtered elements
-    let mut layer_project = IconProject::default();
-    layer_project.canvas = canvas.clone();
-    layer_project.symbols = project.symbols.clone();
+    let mut layer_project = IconProject {
+        canvas: canvas.clone(),
+        symbols: project.symbols.clone(),
+        ..Default::default()
+    };
 
     for elem in project.active_elements() {
         if !elem.common().visible {

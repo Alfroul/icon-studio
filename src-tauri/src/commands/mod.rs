@@ -13,3 +13,4 @@ pub mod pages;
 pub mod symbols;
 pub mod adaptive;
 pub mod iconset;
+pub mod packs;

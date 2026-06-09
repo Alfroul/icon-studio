@@ -256,6 +256,7 @@ export const useProjectStore = defineStore("project", () => {
     setMask: elementsStore.setMask,
     clearMask: elementsStore.clearMask,
     booleanOp: elementsStore.booleanOp,
+    cleanSvg: elementsStore.cleanSvg,
     syncCanvas,
     performUndo,
     performRedo,

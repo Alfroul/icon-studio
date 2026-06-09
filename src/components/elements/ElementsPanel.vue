@@ -172,6 +172,14 @@ function toggleVisible(el: Element) {
 function toggleLocked(el: Element) {
   project.updateElement(el.id, { locked: !el.locked });
 }
+
+async function cleanSelectedSvg() {
+  if (!project.svgPreview) {
+    ui.showToast("No SVG to clean", "warning");
+    return;
+  }
+  await project.cleanSvg(project.svgPreview);
+}
 </script>
 
 <template>
@@ -288,6 +296,13 @@ function toggleLocked(el: Element) {
         @click="deleteSelected"
       >
         Delete Selected
+      </button>
+      <button
+        class="footer-btn"
+        :disabled="!ui.selectedElementId"
+        @click="cleanSelectedSvg"
+      >
+        Clean Up SVG
       </button>
     </div>
 

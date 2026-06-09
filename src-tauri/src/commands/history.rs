@@ -1,9 +1,16 @@
 use crate::commands::canvas::ProjectState;
 use crate::model::history::CommandHistory;
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
 pub type HistoryState = Arc<Mutex<CommandHistory>>;
+
+#[derive(Serialize)]
+pub struct HistoryInfo {
+    pub undo: Vec<String>,
+    pub redo: Vec<String>,
+}
 
 #[tauri::command]
 pub fn undo(
@@ -42,4 +49,11 @@ pub fn clear_history(history_state: State<'_, HistoryState>) -> Result<(), Strin
     let mut history = history_state.lock().map_err(|e| e.to_string())?;
     history.clear();
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_history(history_state: State<'_, HistoryState>) -> Result<HistoryInfo, String> {
+    let history = history_state.lock().map_err(|e| e.to_string())?;
+    let (undo, redo) = history.history_labels();
+    Ok(HistoryInfo { undo, redo })
 }

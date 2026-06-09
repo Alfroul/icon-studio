@@ -320,16 +320,16 @@ fn shape_item_for(shape_type: &crate::model::shapes::ShapeType, w: f64, h: f64, 
 
 fn hex_to_lottie_color(hex: &str) -> serde_json::Value {
     let hex = hex.trim_start_matches('#');
-    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0) as f64 / 255.0;
-    let g = if hex.len() > 4 {
-        u8::from_str_radix(&hex[2..4], 16).unwrap_or(0) as f64 / 255.0
+    let (r, g, b) = if hex.len() == 3 {
+        let r = u8::from_str_radix(&hex[0..1], 16).unwrap_or(0);
+        let g = u8::from_str_radix(&hex[1..2], 16).unwrap_or(0);
+        let b = u8::from_str_radix(&hex[2..3], 16).unwrap_or(0);
+        ((r * 17) as f64 / 255.0, (g * 17) as f64 / 255.0, (b * 17) as f64 / 255.0)
     } else {
-        r
-    };
-    let b = if hex.len() > 4 {
-        u8::from_str_radix(&hex[4..6], 16).unwrap_or(0) as f64 / 255.0
-    } else {
-        r
+        let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0) as f64 / 255.0;
+        let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0) as f64 / 255.0;
+        let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0) as f64 / 255.0;
+        (r, g, b)
     };
     let a = if hex.len() > 7 {
         u8::from_str_radix(&hex[6..8], 16).unwrap_or(255) as f64 / 255.0
@@ -343,10 +343,10 @@ fn hex_to_lottie_color(hex: &str) -> serde_json::Value {
 // Main export entry
 // ---------------------------------------------------------------------------
 
-pub fn export_lottie(project: &IconProject) -> Result<String, String> {
+pub fn export_lottie(project: &IconProject, fps: Option<f64>) -> Result<String, String> {
     let canvas = project.active_canvas();
     let elements = project.active_elements();
-    let fps = 30.0_f64;
+    let fps = fps.unwrap_or(30.0);
 
     let mut layers = Vec::new();
     for (idx, elem) in elements.iter().enumerate() {
@@ -459,7 +459,7 @@ pub fn export_gif_frames(
         e.common().animation.as_ref().map(|a| a.duration + a.delay)
     }).fold(0.0_f64, f64::max);
 
-    let total_frames = ((max_duration * fps as f64).ceil() as u32).max(1).min(300);
+    let total_frames = ((max_duration * fps as f64).ceil() as u32).clamp(1, 300);
     let canvas = project.active_canvas();
     let render_size = canvas.width.max(canvas.height);
 
@@ -511,8 +511,8 @@ fn update_animation_state(project: &mut IconProject, time_s: f64) {
             AnimationType::Translate => {
                 let dx = anim.params.get("dx").and_then(|v| v.as_f64()).unwrap_or(10.0);
                 let dy = anim.params.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                common.x = common.x + dx * progress;
-                common.y = common.y + dy * progress;
+                common.x += dx * progress;
+                common.y += dy * progress;
             }
             AnimationType::Path => {}
         }
@@ -657,7 +657,7 @@ mod tests {
             params: serde_json::Value::Null,
         };
         let project = make_anim_shape(anim);
-        let json = export_lottie(&project).unwrap();
+        let json = export_lottie(&project, None).unwrap();
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         let layer = &val["layers"][0];
@@ -680,7 +680,7 @@ mod tests {
             params: serde_json::json!({ "min_scale": 0.5 }),
         };
         let project = make_anim_shape(anim);
-        let json = export_lottie(&project).unwrap();
+        let json = export_lottie(&project, None).unwrap();
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         let s = &val["layers"][0]["ks"]["s"];
@@ -703,7 +703,7 @@ mod tests {
             params: serde_json::json!({ "min_opacity": 0.0 }),
         };
         let project = make_anim_shape(anim);
-        let json = export_lottie(&project).unwrap();
+        let json = export_lottie(&project, None).unwrap();
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         let o = &val["layers"][0]["ks"]["o"];
@@ -724,7 +724,7 @@ mod tests {
             params: serde_json::json!({ "dx": 20.0, "dy": -10.0 }),
         };
         let project = make_anim_shape(anim);
-        let json = export_lottie(&project).unwrap();
+        let json = export_lottie(&project, None).unwrap();
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         let p = &val["layers"][0]["ks"]["p"];
@@ -771,7 +771,7 @@ mod tests {
     #[test]
     fn test_static_element_fixed_values() {
         let project = make_static_shape();
-        let json = export_lottie(&project).unwrap();
+        let json = export_lottie(&project, None).unwrap();
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         let layer = &val["layers"][0];
@@ -801,7 +801,7 @@ mod tests {
             };
             project.elements.push(Element::Shape(shape));
         }
-        let json = export_lottie(&project).unwrap();
+        let json = export_lottie(&project, None).unwrap();
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(val["layers"].as_array().unwrap().len(), 3);
     }
@@ -809,7 +809,7 @@ mod tests {
     #[test]
     fn test_json_validity() {
         let project = make_anim_shape(Animation::default());
-        let json = export_lottie(&project).unwrap();
+        let json = export_lottie(&project, None).unwrap();
         let result = serde_json::from_str::<serde_json::Value>(&json);
         assert!(result.is_ok(), "Output should be valid JSON");
     }

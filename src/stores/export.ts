@@ -94,6 +94,72 @@ export const useExportStore = defineStore("export", () => {
     return [`${outputDir.value}/icon.webp`];
   }
 
+  async function exportCode(
+    svgContent: string,
+    componentName: string,
+    format: string,
+    size: number,
+    parametrizeFill: boolean,
+  ): Promise<{ code: string; format: string; filename: string } | null> {
+    try {
+      return await invoke<{ code: string; format: string; filename: string }>("export_code", {
+        svgContent,
+        options: {
+          componentName,
+          format,
+          size,
+          parametrizeFill,
+        },
+      });
+    } catch (e) {
+      logError("exportCode", e);
+      ui.showToast(`Code export failed: ${e}`, "error");
+      return null;
+    }
+  }
+
+  // Stage 4: design token export
+  async function exportTokens(
+    format: string,
+  ): Promise<{ content: string; format: string; filename: string } | null> {
+    try {
+      return await invoke<{ content: string; format: string; filename: string }>("export_tokens", {
+        format,
+      });
+    } catch (e) {
+      logError("exportTokens", e);
+      ui.showToast(`Token export failed: ${e}`, "error");
+      return null;
+    }
+  }
+
+  // Stage 6: icon font export
+  async function exportIconFont(
+    glyphs: Array<{ iconName: string; unicode: string; svgPathData: string }>,
+    fontName: string,
+    formats: string[],
+    includeCss: boolean = true,
+    includeDemo: boolean = true,
+    unicodeStart: number = 0xe000,
+  ): Promise<{ files: Array<[string, number[]]> } | null> {
+    try {
+      return await invoke<{ files: Array<[string, number[]]> }>("export_icon_font", {
+        glyphs,
+        options: {
+          fontName,
+          formats,
+          includeCss,
+          includeDemo,
+          unicodeStart,
+        },
+      });
+    } catch (e) {
+      logError("exportIconFont", e);
+      ui.showToast(`Icon font export failed: ${e}`, "error");
+      return null;
+    }
+  }
+
   return {
     PNG_SIZES,
     exporting,
@@ -110,5 +176,8 @@ export const useExportStore = defineStore("export", () => {
     exportIosIcons,
     exportAll,
     exportWebp,
+    exportCode,
+    exportTokens,
+    exportIconFont,
   };
 });

@@ -54,7 +54,7 @@ impl IconStudioHandler {
     ) -> Result<CallToolResult, ErrorData> {
         let json = {
             let project = self.project.lock().map_err(state_err)?;
-            crate::engine::lottie::export_lottie(&project)
+            crate::engine::lottie::export_lottie(&project, None)
                 .map_err(|e| internal_err(format!("Lottie export error: {}", e)))?
         };
 
@@ -127,7 +127,7 @@ impl IconStudioHandler {
 
         let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_bytes);
         Ok(CallToolResult::success(vec![
-            Content::image(&format!("data:image/png;base64,{}", b64), "image/png"),
+            Content::image(format!("data:image/png;base64,{}", b64), "image/png"),
             Content::text(format!("Frame at {}ms", params.time_ms)),
         ]))
     }

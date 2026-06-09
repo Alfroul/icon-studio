@@ -157,6 +157,14 @@ pub struct ConvertToPathParams {
     pub element_id: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct OptimizeSvgParams {
+    #[schemars(description = "SVG string to clean/optimize")]
+    pub svg: String,
+    #[schemars(description = "Optional list of rules to apply. Available: removeNamespaces, removeMetadata, reducePrecision, mergeSingleChildGroups, removeEmptyGroups, removeIdentityTransforms, removeFillNoneOnStroked. Default: all except removeFillNoneOnStroked")]
+    pub rules: Option<Vec<String>>,
+}
+
 struct SvgBounds {
     min_x: f64,
     min_y: f64,
@@ -983,6 +991,50 @@ impl IconStudioHandler {
         
         Ok(CallToolResult::success(vec![Content::text(format!(
             "已将形状 '{}' 转换为路径元素", params.element_id
+        ))]))
+    }
+
+    #[tool(name = "optimize_svg", description = "清理/优化 SVG 字符串，移除编辑器命名空间、元数据、降低精度、合并单子组、移除空组、移除无效变换")]
+    async fn optimize_svg(
+        &self,
+        Parameters(params): Parameters<OptimizeSvgParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let rules = match params.rules {
+            Some(names) => names
+                .iter()
+                .map(|n| match n.as_str() {
+                    "removeNamespaces" => Ok(crate::engine::optimizer::CleanRule::RemoveNamespaces),
+                    "removeMetadata" => Ok(crate::engine::optimizer::CleanRule::RemoveMetadata),
+                    "reducePrecision" => Ok(crate::engine::optimizer::CleanRule::ReducePrecision),
+                    "mergeSingleChildGroups" => {
+                        Ok(crate::engine::optimizer::CleanRule::MergeSingleChildGroups)
+                    }
+                    "removeEmptyGroups" => Ok(crate::engine::optimizer::CleanRule::RemoveEmptyGroups),
+                    "removeIdentityTransforms" => {
+                        Ok(crate::engine::optimizer::CleanRule::RemoveIdentityTransforms)
+                    }
+                    "removeFillNoneOnStroked" => {
+                        Ok(crate::engine::optimizer::CleanRule::RemoveFillNoneOnStroked)
+                    }
+                    other => Err(invalid_params(format!("未知清理规则：{}", other))),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => crate::engine::optimizer::default_rules(),
+        };
+
+        let result = crate::engine::optimizer::clean_svg(&params.svg, &rules)
+            .map_err(|e| internal_err(format!("SVG 清理失败：{}", e)))?;
+
+        let saved = result.bytes_before as i64 - result.bytes_after as i64;
+        let pct = if result.bytes_before > 0 {
+            (saved as f64 / result.bytes_before as f64 * 100.0).round() as i64
+        } else {
+            0
+        };
+
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "SVG 清理完成\n应用规则：{:?}\n原始大小：{} bytes → 清理后：{} bytes（节省 {} bytes, {}%）",
+            result.rules_applied, result.bytes_before, result.bytes_after, saved, pct
         ))]))
     }
 }

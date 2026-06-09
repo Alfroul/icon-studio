@@ -18,6 +18,7 @@ const panels: Record<string, ReturnType<typeof defineAsyncComponent>> = {
   library: defineAsyncComponent(() => import("@/components/library/LibraryPanel.vue")),
   templates: defineAsyncComponent(() => import("@/components/templates/TemplatesPanel.vue")),
   settings: defineAsyncComponent(() => import("@/components/settings/SettingsPanel.vue")),
+  history: defineAsyncComponent(() => import("@/components/history/HistoryPanel.vue")),
 };
 
 const ui = useUiStore();

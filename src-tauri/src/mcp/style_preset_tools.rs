@@ -79,7 +79,7 @@ impl IconStudioHandler {
         let before_next_id = project.next_element_id;
 
         apply_style_preset(&mut project, &params.element_id, &preset)
-            .map_err(|e| invalid_params(e))?;
+            .map_err(invalid_params)?;
 
         project.bump_version();
         let after = project.active_elements().to_vec();
@@ -118,7 +118,7 @@ impl IconStudioHandler {
         drop(project);
 
         apply_style_preset(&mut temp_project, &params.element_id, &preset)
-            .map_err(|e| invalid_params(e))?;
+            .map_err(invalid_params)?;
 
         let svg_str = builder::build(&temp_project)
             .map_err(|e| super::internal_err(format!("Build error: {}", e)))?;

@@ -14,3 +14,8 @@ pub mod adaptive;
 pub mod brand;
 pub mod iconset;
 pub mod lottie;
+pub mod optimizer;
+pub mod codegen;
+pub mod tokens;
+pub mod pack_importer;
+pub mod fontgen;

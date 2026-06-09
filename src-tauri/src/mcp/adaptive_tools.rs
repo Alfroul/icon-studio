@@ -69,9 +69,9 @@ impl IconStudioHandler {
         Parameters(params): Parameters<PreviewAdaptiveParams>,
     ) -> Result<CallToolResult, ErrorData> {
         let shape = parse_shape(&params.shape)?;
-        let project = self.project.lock().map_err(|e| state_err(e))?;
+        let project = self.project.lock().map_err(state_err)?;
         let b64 = adaptive::render_adaptive_base64(&project, shape, params.size)
-            .map_err(|e| internal_err(e))?;
+            .map_err(internal_err)?;
         Ok(CallToolResult::success(vec![
             Content::image(
                 format!("data:image/png;base64,{}", b64),
@@ -87,7 +87,7 @@ impl IconStudioHandler {
     ) -> Result<CallToolResult, ErrorData> {
         let count;
         {
-            let mut project = self.project.lock().map_err(|e| state_err(e))?;
+            let mut project = self.project.lock().map_err(state_err)?;
             let config = project.adaptive.get_or_insert_with(|| AdaptiveConfig {
                 foreground_ids: Vec::new(),
                 background_ids: Vec::new(),
@@ -109,7 +109,7 @@ impl IconStudioHandler {
     ) -> Result<CallToolResult, ErrorData> {
         let count;
         {
-            let mut project = self.project.lock().map_err(|e| state_err(e))?;
+            let mut project = self.project.lock().map_err(state_err)?;
             let config = project.adaptive.get_or_insert_with(|| AdaptiveConfig {
                 foreground_ids: Vec::new(),
                 background_ids: Vec::new(),
@@ -129,10 +129,10 @@ impl IconStudioHandler {
         &self,
         Parameters(params): Parameters<CheckSafeZoneParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let project = self.project.lock().map_err(|e| state_err(e))?;
+        let project = self.project.lock().map_err(state_err)?;
         let result = adaptive::check_safe_zone(&project, params.margin_percent);
         let json = serde_json::to_string_pretty(&result)
-            .map_err(|e| internal_err(e))?;
+            .map_err(internal_err)?;
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
@@ -141,9 +141,9 @@ impl IconStudioHandler {
         &self,
         Parameters(params): Parameters<ExportAdaptiveAndroidParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let project = self.project.lock().map_err(|e| state_err(e))?;
+        let project = self.project.lock().map_err(state_err)?;
         let result = adaptive::export_adaptive_layers(&project, &params.output_dir)
-            .map_err(|e| internal_err(e))?;
+            .map_err(internal_err)?;
         let file_list = result.files.join("\n");
         Ok(CallToolResult::success(vec![Content::text(format!(
             "Exported {} files:\n{}", result.files.len(), file_list
