@@ -66,6 +66,14 @@ pub struct ConsistencyReport {
     pub stroke_width_consistent: bool,
     pub font_size_consistent: bool,
     pub opacity_consistent: bool,
+    #[serde(default)]
+    pub stroke_weight_consistent: bool,
+    #[serde(default)]
+    pub fill_style_consistent: bool,
+    #[serde(default)]
+    pub proportions_consistent: bool,
+    #[serde(default)]
+    pub visual_center_drift: Option<f64>,
     pub issues: Vec<ConsistencyIssue>,
 }
 
@@ -75,6 +83,26 @@ pub struct ConsistencyIssue {
     pub expected: String,
     pub actual: String,
     pub element_id: String,
+    #[serde(default)]
+    pub severity: IssueSeverity,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum IssueSeverity {
+    #[default]
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FillStyle {
+    Outline,
+    Filled,
+    Duotone,
+    None,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -306,17 +334,35 @@ pub fn check_consistency(project: &IconProject) -> ConsistencyReport {
         )
     };
 
+    // --- Stroke weight (same as stroke_width but reported separately) ---
+    let stroke_weight_consistent = stroke_width_consistent;
+
+    // --- Fill style ---
+    let (fill_style_consistent, fill_issues) = check_fill_style_consistency(project);
+    issues.extend(fill_issues);
+
+    // --- Proportions ---
+    let (proportions_consistent, prop_issues) = check_proportions_consistency(project);
+    issues.extend(prop_issues);
+
+    // --- Visual center drift ---
+    let visual_center_drift = compute_visual_center_drift(project);
+
     ConsistencyReport {
         border_radius_consistent,
         stroke_width_consistent,
         font_size_consistent,
         opacity_consistent,
+        stroke_weight_consistent,
+        fill_style_consistent,
+        proportions_consistent,
+        visual_center_drift,
         issues,
     }
 }
 
 /// Check consistency of float values: mode is the "expected" value,
-/// deviations > 10% are flagged as issues.
+/// deviations > 10% are flagged as issues with severity based on deviation.
 fn check_float_consistency(
     values: &[(f64, String)],
     property: &str,
@@ -333,7 +379,6 @@ fn check_float_consistency(
     };
 
     if mode_val == 0.0 {
-        // If mode is 0, use absolute tolerance for comparison
         for &(val, ref id) in values {
             if (val - mode_val).abs() > 0.01 {
                 issues.push(ConsistencyIssue {
@@ -341,18 +386,20 @@ fn check_float_consistency(
                     expected: format!("{:.2}", mode_val),
                     actual: format!("{:.2}", val),
                     element_id: id.clone(),
+                    severity: IssueSeverity::Warning,
                 });
             }
         }
     } else {
         for &(val, ref id) in values {
-            let deviation = ((val - mode_val) / mode_val).abs();
-            if deviation > 0.10 {
+            let deviation_pct = ((val - mode_val) / mode_val).abs() * 100.0;
+            if deviation_pct > 10.0 {
                 issues.push(ConsistencyIssue {
                     property: property.to_string(),
                     expected: format!("{:.2}", mode_val),
                     actual: format!("{:.2}", val),
                     element_id: id.clone(),
+                    severity: classify_severity(deviation_pct),
                 });
             }
         }
@@ -452,4 +499,327 @@ fn get_element_stroke(elem: &Element) -> Option<&str> {
 fn get_element_dimensions(elem: &Element) -> (f64, f64) {
     let c = elem.common();
     (c.width, c.height)
+}
+
+fn get_element_stroke_width(elem: &Element) -> f64 {
+    match elem {
+        Element::Shape(s) => s.stroke_width,
+        Element::Text(t) => t.stroke_width,
+        Element::Icon(i) => i.stroke_width,
+        Element::Path(p) => p.stroke_width,
+        _ => 0.0,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fill style detection
+// ---------------------------------------------------------------------------
+
+/// Detect the fill style of a single element.
+pub fn detect_fill_style(elem: &Element) -> FillStyle {
+    match elem {
+        Element::Group(_) | Element::Symbol(_) | Element::Image(_) => return FillStyle::None,
+        _ => {}
+    }
+
+    let fill = get_element_fill(elem);
+    let has_fill = !fill.is_empty()
+        && fill != "none"
+        && fill != "transparent";
+    let stroke = get_element_stroke(elem);
+    let has_stroke = stroke.is_some()
+        && !stroke.unwrap().is_empty()
+        && stroke.unwrap() != "none"
+        && get_element_stroke_width(elem) > 0.0;
+
+    match (has_fill, has_stroke) {
+        (true, true) => FillStyle::Duotone,
+        (true, false) => FillStyle::Filled,
+        (false, true) => FillStyle::Outline,
+        (false, false) => FillStyle::None,
+    }
+}
+
+/// Classify severity based on deviation percentage.
+fn classify_severity(deviation_pct: f64) -> IssueSeverity {
+    if deviation_pct > 30.0 {
+        IssueSeverity::Error
+    } else if deviation_pct > 15.0 {
+        IssueSeverity::Warning
+    } else {
+        IssueSeverity::Info
+    }
+}
+
+/// Check fill style consistency across all elements.
+pub fn check_fill_style_consistency(project: &IconProject) -> (bool, Vec<ConsistencyIssue>) {
+    let mut styles: Vec<(FillStyle, String)> = Vec::new();
+    visit_all_elements(project.active_elements(), &mut |elem| {
+        match elem {
+            Element::Group(_) | Element::Symbol(_) | Element::Image(_) => return,
+            _ => {}
+        }
+        let style = detect_fill_style(elem);
+        styles.push((style, elem.id().to_string()));
+    });
+
+    if styles.len() < 2 {
+        return (true, Vec::new());
+    }
+
+    // Find mode fill style
+    let mut freq: HashMap<String, usize> = HashMap::new();
+    for (style, _) in &styles {
+        let key = format!("{:?}", style);
+        *freq.entry(key).or_insert(0) += 1;
+    }
+    let mode_key = freq.iter().max_by_key(|(_, c)| **c).map(|(k, _)| k.clone());
+    let mode_key = match mode_key {
+        Some(k) => k,
+        None => return (true, Vec::new()),
+    };
+
+    let mut issues: Vec<ConsistencyIssue> = Vec::new();
+    let mut consistent = true;
+    for (style, id) in &styles {
+        let key = format!("{:?}", style);
+        if key != mode_key {
+            consistent = false;
+            issues.push(ConsistencyIssue {
+                property: "fill_style".to_string(),
+                expected: mode_key.clone(),
+                actual: key,
+                element_id: id.clone(),
+                severity: IssueSeverity::Warning,
+            });
+        }
+    }
+    (consistent, issues)
+}
+
+/// Check proportions consistency (element area / canvas area).
+pub fn check_proportions_consistency(project: &IconProject) -> (bool, Vec<ConsistencyIssue>) {
+    let canvas_w = project.active_canvas().width as f64;
+    let canvas_h = project.active_canvas().height as f64;
+    let canvas_area = canvas_w * canvas_h;
+    if canvas_area <= 0.0 {
+        return (true, Vec::new());
+    }
+
+    let mut proportions: Vec<(f64, String)> = Vec::new();
+    visit_all_elements(project.active_elements(), &mut |elem| {
+        let (w, h) = get_element_dimensions(elem);
+        if w > 0.0 && h > 0.0 {
+            let area = w * h;
+            let ratio = area / canvas_area;
+            proportions.push((ratio, elem.id().to_string()));
+        }
+    });
+
+    if proportions.len() < 2 {
+        return (true, Vec::new());
+    }
+
+    let raw: Vec<f64> = proportions.iter().map(|(v, _)| *v).collect();
+    let (mode_val, _) = match find_mode(&raw) {
+        Some(m) => m,
+        None => return (true, Vec::new()),
+    };
+
+    if mode_val <= 0.0 {
+        return (true, Vec::new());
+    }
+
+    let mut issues: Vec<ConsistencyIssue> = Vec::new();
+    let mut consistent = true;
+    for &(val, ref id) in &proportions {
+        let deviation = ((val - mode_val) / mode_val).abs() * 100.0;
+        if deviation > 20.0 {
+            consistent = false;
+            issues.push(ConsistencyIssue {
+                property: "proportions".to_string(),
+                expected: format!("{:.1}%", mode_val * 100.0),
+                actual: format!("{:.1}%", val * 100.0),
+                element_id: id.clone(),
+                severity: classify_severity(deviation),
+            });
+        }
+    }
+    (consistent, issues)
+}
+
+/// Compute visual center drift: max distance of any element's weighted center
+/// from the canvas center, normalized to [0, 1].
+pub fn compute_visual_center_drift(project: &IconProject) -> Option<f64> {
+    let canvas_w = project.active_canvas().width as f64;
+    let canvas_h = project.active_canvas().height as f64;
+    let cx = canvas_w / 2.0;
+    let cy = canvas_h / 2.0;
+    let diag = (canvas_w * canvas_w + canvas_h * canvas_h).sqrt();
+
+    let mut centers: Vec<(f64, f64, f64)> = Vec::new(); // (center_x, center_y, area)
+    visit_all_elements(project.active_elements(), &mut |elem| {
+        let c = elem.common();
+        let center_x = c.x + c.width / 2.0;
+        let center_y = c.y + c.height / 2.0;
+        let area = c.width * c.height;
+        if area > 0.0 {
+            centers.push((center_x, center_y, area));
+        }
+    });
+
+    if centers.is_empty() {
+        return None;
+    }
+
+    let total_area: f64 = centers.iter().map(|(_, _, a)| *a).sum();
+    if total_area <= 0.0 {
+        return None;
+    }
+
+    let mut max_drift = 0.0f64;
+    for (x, y, _area) in &centers {
+        let dx = x - cx;
+        let dy = y - cy;
+        let dist = (dx * dx + dy * dy).sqrt();
+        let normalized = dist / (diag / 2.0);
+        if normalized > max_drift {
+            max_drift = normalized;
+        }
+    }
+
+    Some(max_drift)
+}
+
+// ---------------------------------------------------------------------------
+// Auto-fix
+// ---------------------------------------------------------------------------
+
+/// Recursively find and mutate an element by ID.
+fn find_element_mut<'a>(elements: &'a mut [Element], id: &str) -> Option<&'a mut Element> {
+    for elem in elements.iter_mut() {
+        if elem.id() == id {
+            return Some(elem);
+        }
+        if let Element::Group(g) = elem {
+            if let Some(found) = find_element_mut(&mut g.children, id) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// Fix consistency issues for specified element IDs by setting deviated
+/// properties to their mode values. Returns a modified deep copy of the project.
+pub fn fix_consistency_issues(
+    project: &IconProject,
+    element_ids: &[String],
+) -> Result<IconProject, String> {
+    let mut fixed = project.clone();
+
+    // Compute mode values from the original project
+    let mut border_radii: Vec<f64> = Vec::new();
+    let mut stroke_widths: Vec<f64> = Vec::new();
+    let mut font_sizes: Vec<f64> = Vec::new();
+    let mut opacities: Vec<f64> = Vec::new();
+
+    visit_all_elements(project.active_elements(), &mut |elem| {
+        if let Element::Shape(s) = elem {
+            if matches!(s.shape_type, crate::model::shapes::ShapeType::Rect | crate::model::shapes::ShapeType::RoundedRect)
+                && s.border_radius.abs() > f64::EPSILON
+            {
+                border_radii.push(s.border_radius);
+            }
+            if s.stroke_width > 0.0 {
+                stroke_widths.push(s.stroke_width);
+            }
+        }
+        if let Element::Text(t) = elem {
+            font_sizes.push(t.font_size);
+            if t.stroke_width > 0.0 {
+                stroke_widths.push(t.stroke_width);
+            }
+        }
+        if let Element::Icon(i) = elem {
+            if i.stroke_width > 0.0 {
+                stroke_widths.push(i.stroke_width);
+            }
+        }
+        if let Element::Path(p) = elem {
+            if p.stroke_width > 0.0 {
+                stroke_widths.push(p.stroke_width);
+            }
+        }
+        let c = elem.common();
+        if c.opacity < 1.0 {
+            opacities.push(c.opacity);
+        }
+    });
+
+    let mode_border_radius = find_mode(&border_radii).map(|(v, _)| v);
+    let mode_stroke_width = find_mode(&stroke_widths).map(|(v, _)| v);
+    let mode_font_size = find_mode(&font_sizes).map(|(v, _)| v);
+    let mode_opacity = find_mode(&opacities).map(|(v, _)| v);
+
+    // Get the issues for reference
+    let report = check_consistency(project);
+    let issue_map: HashMap<String, Vec<&ConsistencyIssue>> = {
+        let mut map: HashMap<String, Vec<&ConsistencyIssue>> = HashMap::new();
+        for issue in &report.issues {
+            map.entry(issue.element_id.clone()).or_default().push(issue);
+        }
+        map
+    };
+
+    let elements = fixed.active_elements_mut();
+    for id in element_ids {
+        let elem = match find_element_mut(elements, id) {
+            Some(e) => e,
+            None => continue,
+        };
+
+        let issues = match issue_map.get(id) {
+            Some(v) => v,
+            None => continue,
+        };
+
+        for issue in issues {
+            match issue.property.as_str() {
+                "border_radius" => {
+                    if let Some(mode) = mode_border_radius {
+                        if let Element::Shape(s) = elem {
+                            s.border_radius = mode;
+                        }
+                    }
+                }
+                "stroke_width" => {
+                    if let Some(mode) = mode_stroke_width {
+                        match elem {
+                            Element::Shape(s) => s.stroke_width = mode,
+                            Element::Text(t) => t.stroke_width = mode,
+                            Element::Icon(i) => i.stroke_width = mode,
+                            Element::Path(p) => p.stroke_width = mode,
+                            _ => {}
+                        }
+                    }
+                }
+                "font_size" => {
+                    if let Some(mode) = mode_font_size {
+                        if let Element::Text(t) = elem {
+                            t.font_size = mode;
+                        }
+                    }
+                }
+                "opacity" => {
+                    if let Some(mode) = mode_opacity {
+                        elem.common_mut().opacity = mode;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(fixed)
 }

@@ -30,7 +30,7 @@ tokio = { version = "1", features = ["full"] }
 tauri-plugin-dialog = "2"
 clap = { version = "4", features = ["derive"] }
 rayon = "1.10"
-image = { version = "0.25", features = ["webp", "gif"], default-features = false }
+image = { version = "0.25", features = ["webp", "gif", "png"], default-features = false }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 geo = "0.28"
@@ -38,6 +38,7 @@ dirs = "6"
 regex = "1"
 # allsorts = "0.14"  # Stage 6: icon font generation (not needed for font generation, only parsing)
 flate2 = "1"         # Stage 6: WOFF zlib compression
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

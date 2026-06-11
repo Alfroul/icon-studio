@@ -141,6 +141,29 @@ function runBoolean(op: string) {
   project.booleanOp(element.value.id, booleanTargetId.value, op);
   booleanTargetId.value = "";
 }
+
+// Overlay
+const positions = [
+  { value: "topLeft", label: "TL" },
+  { value: "topRight", label: "TR" },
+  { value: "bottomLeft", label: "BL" },
+  { value: "bottomRight", label: "BR" },
+];
+
+function toggleOverlay(event: Event) {
+  if (!element.value) return;
+  const checked = (event.target as HTMLInputElement).checked;
+  if (checked) {
+    updateProp("overlay", { kind: "add", position: "bottomRight", color: "#FF0000", size_ratio: 0.4 });
+  } else {
+    updateProp("overlay", null);
+  }
+}
+
+function updateOverlayProp(key: string, value: unknown) {
+  if (!element.value?.overlay) return;
+  updateProp("overlay", { ...element.value.overlay, [key]: value });
+}
 </script>
 
 <template>
@@ -447,6 +470,92 @@ function runBoolean(op: string) {
         <button class="browse-icons-btn" @click="ui.toggleIconBrowser(true)">
           Browse Icons...
         </button>
+      </div>
+
+      <!-- Overlay -->
+      <div class="prop-group">
+        <div class="prop-group-label">Overlay</div>
+        <div class="prop-row">
+          <label class="prop-label">Enable</label>
+          <input
+            type="checkbox"
+            :checked="element.overlay != null"
+            @change="toggleOverlay($event)"
+          />
+        </div>
+        <template v-if="element.overlay">
+          <div class="prop-row">
+            <label class="prop-label">Type</label>
+            <select
+              class="prop-select"
+              :value="element.overlay.kind"
+              @change="updateOverlayProp('kind', ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="add">+ Add</option>
+              <option value="remove">- Remove</option>
+              <option value="check">✓ Check</option>
+              <option value="info">i Info</option>
+              <option value="warning">! Warning</option>
+              <option value="error">✕ Error</option>
+              <option value="star">★ Star</option>
+              <option value="lock">🔒 Lock</option>
+              <option value="new">New</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="prop-row">
+            <label class="prop-label">Position</label>
+            <div class="position-grid">
+              <button
+                v-for="pos in positions"
+                :key="pos.value"
+                :class="['pos-btn', { active: element.overlay!.position === pos.value }]"
+                :title="pos.label"
+                @click="updateOverlayProp('position', pos.value)"
+              >{{ pos.label.charAt(0) }}</button>
+            </div>
+          </div>
+          <div class="prop-row">
+            <label class="prop-label">Color</label>
+            <div class="color-input-wrap">
+              <input
+                type="color"
+                class="color-swatch"
+                :value="element.overlay.color || '#FF0000'"
+                @input="updateOverlayProp('color', ($event.target as HTMLInputElement).value)"
+              />
+              <input
+                type="text"
+                class="color-text"
+                :value="element.overlay.color || '#FF0000'"
+                @change="updateOverlayProp('color', ($event.target as HTMLInputElement).value)"
+              />
+            </div>
+          </div>
+          <div class="prop-row">
+            <label class="prop-label">Size</label>
+            <input
+              type="range"
+              class="prop-range"
+              :value="element.overlay.size_ratio ?? 0.4"
+              min="0.2"
+              max="0.6"
+              step="0.02"
+              @input="updateOverlayProp('size_ratio', Number(($event.target as HTMLInputElement).value))"
+            />
+            <span class="range-value">{{ Math.round((element.overlay.size_ratio ?? 0.4) * 100) }}%</span>
+          </div>
+          <div class="prop-row" v-if="element.overlay.kind === 'custom'">
+            <label class="prop-label">SVG Path</label>
+            <input
+              type="text"
+              class="prop-input"
+              :value="element.overlay.custom_path || ''"
+              placeholder="M0,0 L10,10..."
+              @change="updateOverlayProp('custom_path', ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+        </template>
       </div>
 
       <!-- Clip / Mask -->
@@ -911,5 +1020,34 @@ function runBoolean(op: string) {
 .controls-disabled {
   pointer-events: none;
   opacity: 0.5;
+}
+
+.position-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  flex: 1;
+}
+
+.pos-btn {
+  height: 22px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast) ease;
+}
+
+.pos-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.pos-btn.active {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 </style>

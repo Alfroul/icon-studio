@@ -1,3 +1,4 @@
+pub mod ai_config;
 pub mod layout;
 pub mod elements;
 pub mod project;

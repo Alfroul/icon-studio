@@ -132,6 +132,7 @@ fn app_icon_square() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 shape_type: ShapeType::RoundedRect,
                 fill: "#4F46E5".into(),
@@ -155,6 +156,7 @@ fn app_icon_square() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 name: "star".into(),
                 fill: "#FFFFFF".into(),
@@ -173,6 +175,7 @@ fn app_icon_square() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 
@@ -200,6 +203,7 @@ fn app_icon_circle() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 shape_type: ShapeType::Circle,
                 fill: "#059669".into(),
@@ -223,6 +227,7 @@ fn app_icon_circle() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 name: "heart".into(),
                 fill: "#FFFFFF".into(),
@@ -241,6 +246,7 @@ fn app_icon_circle() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 
@@ -266,6 +272,7 @@ fn letter_logo() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 shape_type: ShapeType::Hexagon,
                 fill: "#7C3AED".into(),
@@ -289,6 +296,7 @@ fn letter_logo() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 content: "A".into(),
                 fill: "#FFFFFF".into(),
@@ -311,6 +319,7 @@ fn letter_logo() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 
@@ -341,6 +350,7 @@ fn dual_letter_logo() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 content: "A".into(),
                 fill: "#3B82F6".into(),
@@ -366,6 +376,7 @@ fn dual_letter_logo() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 content: "B".into(),
                 fill: "#EF4444".into(),
@@ -388,6 +399,7 @@ fn dual_letter_logo() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 
@@ -410,6 +422,7 @@ fn text_logo() -> IconProject {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             content: "STUDIO".into(),
             fill: "#1E1E1E".into(),
@@ -431,6 +444,7 @@ fn text_logo() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 
@@ -455,6 +469,7 @@ fn pure_icon() -> IconProject {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             name: "zap".into(),
             fill: "#F59E0B".into(),
@@ -472,6 +487,7 @@ fn pure_icon() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 
@@ -502,6 +518,7 @@ fn shield_badge() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 shape_type: ShapeType::Shield,
                 fill: "#DC2626".into(),
@@ -525,6 +542,7 @@ fn shield_badge() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 content: "VIP".into(),
                 fill: "#FFFFFF".into(),
@@ -547,6 +565,7 @@ fn shield_badge() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 
@@ -575,6 +594,7 @@ fn minimal_square() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 shape_type: ShapeType::Rect,
                 fill: "#111827".into(),
@@ -598,6 +618,7 @@ fn minimal_square() -> IconProject {
                 blend_mode: None,
                 clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
                 content: "IS".into(),
                 fill: "#FFFFFF".into(),
@@ -620,6 +641,7 @@ fn minimal_square() -> IconProject {
         adaptive: None,
         brand_kits: Vec::new(),
         custom_style_presets: Vec::new(),
+        theme_variants: Vec::new(),
     }
 }
 

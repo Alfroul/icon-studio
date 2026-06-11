@@ -15,6 +15,8 @@ export const useExportStore = defineStore("export", () => {
   const selectedPngSizes = ref<number[]>([16, 32, 64, 128, 256, 512]);
   const exportResults = ref<string[]>([]);
   const error = ref<string | null>(null);
+  const pixelSnap = ref(false);
+  const faviconSnippet = ref("");
 
   async function selectOutputDir(): Promise<void> {
     try {
@@ -45,6 +47,7 @@ export const useExportStore = defineStore("export", () => {
     const results = await invoke<string[]>("export_png", {
       sizes: targetSizes,
       outputDir: outputDir.value,
+      pixelSnap: pixelSnap.value || null,
     });
     return results;
   }
@@ -81,6 +84,7 @@ export const useExportStore = defineStore("export", () => {
       outputDir: outputDir.value,
       formats: selectedFormats.value,
       pngSizes: selectedPngSizes.value,
+      pixelSnap: pixelSnap.value || null,
     });
     return results;
   }
@@ -160,6 +164,91 @@ export const useExportStore = defineStore("export", () => {
     }
   }
 
+  async function exportPwaIcons(
+    outputDir: string,
+    appName: string,
+    themeColor?: string,
+    bgColor?: string,
+  ): Promise<string[]> {
+    try {
+      return await invoke<string[]>("export_pwa_icons", {
+        outputDir,
+        appName,
+        themeColor: themeColor || null,
+        bgColor: bgColor || null,
+      });
+    } catch (e) {
+      logError("exportPwaIcons", e);
+      ui.showToast(`PWA export failed: ${e}`, "error");
+      return [];
+    }
+  }
+
+  async function exportAllPlatforms(
+    outputDir: string,
+    appName: string,
+    themeColor?: string,
+    bgColor?: string,
+  ): Promise<import("@/types").AllPlatformsResult | null> {
+    try {
+      return await invoke<import("@/types").AllPlatformsResult>("export_all_platforms", {
+        outputDir,
+        appName,
+        themeColor: themeColor || null,
+        bgColor: bgColor || null,
+      });
+    } catch (e) {
+      logError("exportAllPlatforms", e);
+      ui.showToast(`All-platforms export failed: ${e}`, "error");
+      return null;
+    }
+  }
+
+  async function exportSpriteSheet(
+    outputPath: string,
+    columns: number,
+    iconSize: number,
+    padding?: number,
+  ): Promise<import("@/types").SpriteSheetResult | null> {
+    try {
+      return await invoke<import("@/types").SpriteSheetResult>("export_sprite_sheet", {
+        outputPath,
+        columns,
+        iconSize,
+        padding: padding ?? null,
+      });
+    } catch (e) {
+      logError("exportSpriteSheet", e);
+      ui.showToast(`Sprite sheet export failed: ${e}`, "error");
+      return null;
+    }
+  }
+
+  async function getFaviconHtmlSnippet(
+    appName: string,
+  ): Promise<string> {
+    try {
+      return await invoke<string>("get_favicon_html_snippet", { appName });
+    } catch (e) {
+      logError("getFaviconHtmlSnippet", e);
+      return "";
+    }
+  }
+
+  async function generateWeightVariants(
+    weights: string[],
+  ): Promise<Array<{ weight: string; svg: string }>> {
+    try {
+      return await invoke<Array<{ weight: string; svg: string }>>("generate_weight_variants", {
+        weights,
+      });
+    } catch (e) {
+      logError("generateWeightVariants", e);
+      ui.showToast(`Weight variant generation failed: ${e}`, "error");
+      return [];
+    }
+  }
+
   return {
     PNG_SIZES,
     exporting,
@@ -168,6 +257,8 @@ export const useExportStore = defineStore("export", () => {
     selectedPngSizes,
     exportResults,
     error,
+    pixelSnap,
+    faviconSnippet,
     selectOutputDir,
     exportSvg,
     exportPng,
@@ -179,5 +270,10 @@ export const useExportStore = defineStore("export", () => {
     exportCode,
     exportTokens,
     exportIconFont,
+    exportPwaIcons,
+    exportAllPlatforms,
+    exportSpriteSheet,
+    getFaviconHtmlSnippet,
+    generateWeightVariants,
   };
 });

@@ -1,3 +1,126 @@
+// ---- Phase 3 types ----
+
+export type IssueSeverity = "info" | "warning" | "error";
+
+export type FillStyle = "outline" | "filled" | "duotone" | "none";
+
+export type WeightPreset = "thin" | "light" | "regular" | "medium" | "bold" | "fill";
+
+export type IconStyleKind = "strokeBased" | "fillBased" | "mixed";
+
+export interface SpriteSheetIcon {
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface SpriteSheetResult {
+  image_path: string;
+  icons: SpriteSheetIcon[];
+  total_width: number;
+  total_height: number;
+}
+
+export interface AllPlatformsResult {
+  ios_paths: string[];
+  android_paths: string[];
+  pwa_paths: string[];
+  favicon_paths: string[];
+}
+
+export interface FaviconPackageResult {
+  paths: string[];
+  html_snippet: string;
+}
+
+// ---- Phase 2 types ----
+
+export type OverlayKind =
+  | "add"
+  | "remove"
+  | "check"
+  | "info"
+  | "warning"
+  | "error"
+  | "star"
+  | "lock"
+  | "new"
+  | "custom";
+
+export type OverlayPosition =
+  | "topLeft"
+  | "topRight"
+  | "bottomLeft"
+  | "bottomRight";
+
+export interface Overlay {
+  kind: OverlayKind;
+  position: OverlayPosition;
+  color?: string | null;
+  size_ratio?: number | null;
+  offset_x?: number | null;
+  offset_y?: number | null;
+  custom_path?: string | null;
+}
+
+export type ThemeRule =
+  | "invertColors"
+  | { replaceColor: { from: string; to: string } }
+  | { adjustOpacity: { factor: number } }
+  | "grayscale"
+  | { desaturate: { factor: number } }
+  | { customFill: { color: string } };
+
+export interface ThemeVariant {
+  name: string;
+  base_page_index?: number;
+  rules: ThemeRule[];
+}
+
+export type PresetShape =
+  | "squircle"
+  | "circle"
+  | "roundedRect"
+  | "square"
+  | "hexagon"
+  | "shield";
+
+export interface ThemePreset {
+  id: string;
+  name: string;
+  corner_radius?: number;
+  padding_ratio?: number;
+  background?: string | null;
+  shadow?: Shadow | null;
+  shape: PresetShape;
+  preview_svg?: string | null;
+}
+
+export type AiProvider = "openAi" | "recraft" | "custom" | "ollama";
+
+export type AiTask =
+  | "textToIcon"
+  | "sketchToIcon"
+  | "styleTransfer"
+  | "varyIcon"
+  | "removeBackground";
+
+export type IconStyle =
+  | "flat"
+  | "outline"
+  | "duotone"
+  | "gradient"
+  | "threeD"
+  | "minimal"
+  | "cartoon"
+  | "pixelArt"
+  | "lineArt"
+  | "neon";
+
+// ---- Phase 1 types ----
+
 export interface Canvas {
   width: number;
   height: number;
@@ -95,6 +218,7 @@ export interface ShapeElement {
   locked?: boolean;
   visible?: boolean;
   svg_filter?: SvgFilter | null;
+  overlay?: Overlay | null;
 }
 
 export interface PathNode {
@@ -130,6 +254,7 @@ export interface TextElement {
   locked?: boolean;
   visible?: boolean;
   svg_filter?: SvgFilter | null;
+  overlay?: Overlay | null;
 }
 
 export interface IconElement {
@@ -154,6 +279,7 @@ export interface IconElement {
   locked?: boolean;
   visible?: boolean;
   svg_filter?: SvgFilter | null;
+  overlay?: Overlay | null;
 }
 
 export interface ImageElement {
@@ -178,6 +304,7 @@ export interface ImageElement {
   locked?: boolean;
   visible?: boolean;
   svg_filter?: SvgFilter | null;
+  overlay?: Overlay | null;
 }
 
 export interface PathElement {
@@ -206,6 +333,7 @@ export interface PathElement {
   locked?: boolean;
   visible?: boolean;
   svg_filter?: SvgFilter | null;
+  overlay?: Overlay | null;
 }
 
 export interface GroupElement {
@@ -227,6 +355,7 @@ export interface GroupElement {
   locked?: boolean;
   visible?: boolean;
   svg_filter?: SvgFilter | null;
+  overlay?: Overlay | null;
 }
 
 export interface SymbolOverride {
@@ -251,6 +380,7 @@ export interface SymbolElement {
   locked?: boolean;
   visible?: boolean;
   svg_filter?: SvgFilter | null;
+  overlay?: Overlay | null;
 }
 
 export interface SymbolDef {
@@ -292,6 +422,7 @@ export interface IconProject {
   templates: Record<string, IconProject>;
   pages?: Page[];
   active_page_index?: number;
+  theme_variants?: ThemeVariant[];
 }
 
 export interface ColorInfo {
@@ -312,6 +443,7 @@ export interface ConsistencyIssue {
   expected: string;
   actual: string;
   element_id: string;
+  severity?: IssueSeverity;
 }
 
 export interface ConsistencyReport {
@@ -319,6 +451,10 @@ export interface ConsistencyReport {
   stroke_width_consistent: boolean;
   font_size_consistent: boolean;
   opacity_consistent: boolean;
+  stroke_weight_consistent?: boolean;
+  fill_style_consistent?: boolean;
+  proportions_consistent?: boolean;
+  visual_center_drift?: number | null;
   issues: ConsistencyIssue[];
 }
 

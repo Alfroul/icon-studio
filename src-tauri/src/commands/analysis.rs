@@ -34,3 +34,18 @@ pub fn find_elements(
     };
     Ok(analyzer::find_elements(&project, &filter))
 }
+
+#[tauri::command]
+pub fn fix_consistency(
+    state: State<'_, ProjectState>,
+    element_ids: Vec<String>,
+) -> Result<String, String> {
+    let project = state.lock().map_err(|e| e.to_string())?;
+    let fixed = analyzer::fix_consistency_issues(&project, &element_ids)?;
+    drop(project);
+
+    let mut guard = state.lock().map_err(|e| e.to_string())?;
+    *guard = fixed;
+
+    Ok("ok".to_string())
+}

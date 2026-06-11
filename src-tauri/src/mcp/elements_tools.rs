@@ -131,6 +131,7 @@ impl IconStudioHandler {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             data,
         };
@@ -369,6 +370,7 @@ impl IconStudioHandler {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             d: params.d,
             fill: params.fill,

@@ -13,6 +13,7 @@ pub enum CleanRule {
     RemoveEmptyGroups,
     RemoveIdentityTransforms,
     RemoveFillNoneOnStroked,
+    SnapToPixelGrid { grid_size: f64 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +35,7 @@ impl CleanRule {
             Self::RemoveEmptyGroups => "RemoveEmptyGroups",
             Self::RemoveIdentityTransforms => "RemoveIdentityTransforms",
             Self::RemoveFillNoneOnStroked => "RemoveFillNoneOnStroked",
+            Self::SnapToPixelGrid { .. } => "SnapToPixelGrid",
         }
     }
 }
@@ -58,6 +60,9 @@ fn apply_rule(svg: &str, rule: &CleanRule) -> Result<(String, bool), AppError> {
         CleanRule::RemoveEmptyGroups => rule_remove_empty_groups(svg),
         CleanRule::RemoveIdentityTransforms => rule_remove_identity_transforms(svg),
         CleanRule::RemoveFillNoneOnStroked => rule_remove_fill_none_on_stroked(svg),
+        CleanRule::SnapToPixelGrid { grid_size } => {
+            crate::engine::exporter::snap_to_pixel_grid(svg, *grid_size)?
+        }
     };
     let changed = result != svg;
     Ok((result, changed))

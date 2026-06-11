@@ -137,6 +137,7 @@ fn process_path(path: &usvg::Path, ctx: &mut ImportContext, parent_opacity: f64)
             blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         d: normalised_d(data, local.min_x, local.min_y),
         fill: path.fill().map(extract_fill_color).unwrap_or_else(|| "none".to_string()),
@@ -283,6 +284,7 @@ fn process_text(text: &usvg::Text, ctx: &mut ImportContext, parent_opacity: f64)
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             content,
             fill,
@@ -326,6 +328,7 @@ fn process_image(image: &usvg::Image, ctx: &mut ImportContext, parent_opacity: f
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         data,
     };

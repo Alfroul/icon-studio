@@ -1,3 +1,4 @@
+use crate::engine::theme_presets;
 use crate::error::AppError;
 use crate::model::group::GroupElement;
 use crate::model::helpers::*;
@@ -60,6 +61,7 @@ pub fn add_shape(
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         shape_type: st,
         fill,
@@ -112,6 +114,7 @@ pub fn add_text(
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         content,
         fill,
@@ -165,6 +168,7 @@ pub fn add_icon(
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         name: icon_name,
         fill,
@@ -211,6 +215,7 @@ pub fn add_image(
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         data,
     };
@@ -246,6 +251,7 @@ pub fn add_path(
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         d,
         fill: fill.unwrap_or_else(|| "none".to_string()),
@@ -556,6 +562,7 @@ pub fn group_elements(
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
         children,
         expanded: true,
@@ -1143,6 +1150,7 @@ pub fn convert_to_path(
             locked: shape.common.locked,
             visible: shape.common.visible,
             svg_filter: shape.common.svg_filter.clone(),
+            overlay: shape.common.overlay.clone(),
         },
         d,
         fill: shape.fill.clone(),
@@ -1180,4 +1188,236 @@ pub fn convert_to_path(
     }
 
     Ok(new_id)
+}
+
+#[tauri::command]
+pub fn fit_element_to_canvas(
+    state: State<'_, ProjectState>,
+    history_state: State<'_, HistoryState>,
+    element_id: String,
+) -> Result<(), String> {
+    let mut project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+
+    let canvas_w = project.active_canvas().width as f64;
+    let canvas_h = project.active_canvas().height as f64;
+
+    let elem = find_element_deep_mut(project.active_elements_mut(), &element_id)
+        .ok_or_else(|| AppError::NotFoundError(format!("Element '{}' not found", element_id)))?;
+
+    let (ew, eh) = (elem.common().width, elem.common().height);
+    let (x, y, w, h) = theme_presets::fit_to_canvas(canvas_w, canvas_h, ew, eh);
+
+    let old_props = serde_json::to_value(&*elem).map_err(AppError::from)?;
+    let mut new_props = old_props.clone();
+    if let serde_json::Value::Object(ref mut map) = new_props {
+        map.insert("x".into(), serde_json::json!(x));
+        map.insert("y".into(), serde_json::json!(y));
+        map.insert("width".into(), serde_json::json!(w));
+        map.insert("height".into(), serde_json::json!(h));
+    }
+
+    let _ = elem;
+
+    let cmd = SetPropsCommand::new(element_id, old_props, new_props);
+    let mut history = history_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    history.push_and_execute(Box::new(cmd), &mut project)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn add_image_from_data(
+    state: State<'_, ProjectState>,
+    history_state: State<'_, HistoryState>,
+    image_data: String,
+    width: f64,
+    height: f64,
+) -> Result<ImageElement, String> {
+    if width.is_nan() || height.is_nan() || width <= 0.0 || height <= 0.0 {
+        return Err(AppError::ValidationError("width and height must be positive numbers".into()).into());
+    }
+
+    let mut project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+
+    let canvas_w = project.active_canvas().width as f64;
+    let canvas_h = project.active_canvas().height as f64;
+    let (x, y, fit_w, fit_h) = theme_presets::fit_to_canvas(canvas_w, canvas_h, width, height);
+
+    let id = project.alloc_element_id("image");
+    let element = ImageElement {
+        common: CommonProps {
+            id,
+            x,
+            y,
+            width: fit_w,
+            height: fit_h,
+            opacity: 1.0,
+            rotation: 0.0,
+            shadows: vec![],
+            animation: None,
+            blend_mode: None,
+            clip_element_id: None,
+            mask_element_id: None,
+            locked: false,
+            visible: true,
+            svg_filter: None,
+            overlay: None,
+        },
+        data: image_data,
+    };
+    let result = element.clone();
+    let cmd = AddElementCommand::new(Element::Image(element));
+    let mut history = history_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    history.push_and_execute(Box::new(cmd), &mut project)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn add_path_from_svg(
+    state: State<'_, ProjectState>,
+    history_state: State<'_, HistoryState>,
+    cache_state: State<'_, RenderCacheState>,
+    svg_content: String,
+) -> Result<Vec<String>, String> {
+    let mut elements = crate::engine::importer::import_svg_as_elements(&svg_content)
+        .map_err(|e| AppError::RenderError(format!("Failed to parse SVG: {}", e)))?;
+
+    if elements.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    let canvas_w = project.active_canvas().width as f64;
+    let canvas_h = project.active_canvas().height as f64;
+    let bounds = calculate_svg_bounds(&elements);
+    let (target_x, target_y, target_sz_w, target_sz_h) = theme_presets::fit_to_canvas(
+        canvas_w, canvas_h, bounds.size, bounds.size,
+    );
+
+    let scale_x = target_sz_w / bounds.size.max(1.0);
+    let scale_y = target_sz_h / bounds.size.max(1.0);
+
+    let mut ids = Vec::new();
+    for elem in &mut elements {
+        let prefix = match elem {
+            Element::Shape(_) => "shape",
+            Element::Text(_) => "text",
+            Element::Icon(_) => "icon",
+            Element::Image(_) => "image",
+            Element::Path(_) => "path",
+            Element::Group(_) => "group",
+            Element::Symbol(_) => "symbol",
+        };
+
+        let new_id = project.alloc_element_id(prefix);
+        elem.common_mut().id = new_id.clone();
+        ids.push(new_id);
+
+        let c = elem.common_mut();
+        c.x = (c.x - bounds.min_x) * scale_x + target_x;
+        c.y = (c.y - bounds.min_y) * scale_y + target_y;
+        c.width *= scale_x;
+        c.height *= scale_y;
+    }
+
+    let mut history = history_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    history.begin_batch("Import dropped SVG").map_err(|e| e.to_string())?;
+    for e in elements {
+        history.push_and_execute(
+            Box::new(AddElementCommand::new(e)),
+            &mut project,
+        ).map_err(|e| e.to_string())?;
+    }
+    history.commit_batch().map_err(|e| e.to_string())?;
+
+    project.bump_version();
+    drop(project);
+
+    let mut cache = cache_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    cache.invalidate_cache();
+
+    Ok(ids)
+}
+
+// ---- Overlay Commands ----
+
+#[tauri::command]
+pub fn set_element_overlay(
+    state: State<'_, ProjectState>,
+    cache_state: State<'_, RenderCacheState>,
+    element_id: String,
+    overlay: crate::model::Overlay,
+) -> Result<(), String> {
+    let mut project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    let elem = find_element_deep_mut(project.active_elements_mut(), &element_id)
+        .ok_or_else(|| format!("Element '{}' not found", element_id))?;
+    elem.common_mut().overlay = Some(overlay);
+
+    project.bump_version();
+    drop(project);
+
+    let mut cache = cache_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    cache.invalidate_cache();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn remove_element_overlay(
+    state: State<'_, ProjectState>,
+    cache_state: State<'_, RenderCacheState>,
+    element_id: String,
+) -> Result<(), String> {
+    let mut project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    let elem = find_element_deep_mut(project.active_elements_mut(), &element_id)
+        .ok_or_else(|| format!("Element '{}' not found", element_id))?;
+    elem.common_mut().overlay = None;
+
+    project.bump_version();
+    drop(project);
+
+    let mut cache = cache_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    cache.invalidate_cache();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn batch_apply_overlay(
+    state: State<'_, ProjectState>,
+    cache_state: State<'_, RenderCacheState>,
+    element_ids: Vec<String>,
+    overlay: crate::model::Overlay,
+) -> Result<(), String> {
+    let mut project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    for eid in &element_ids {
+        if let Some(elem) = find_element_deep_mut(project.active_elements_mut(), eid) {
+            elem.common_mut().overlay = Some(overlay.clone());
+        }
+    }
+
+    project.bump_version();
+    drop(project);
+
+    let mut cache = cache_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    cache.invalidate_cache();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn batch_remove_overlay(
+    state: State<'_, ProjectState>,
+    cache_state: State<'_, RenderCacheState>,
+    element_ids: Vec<String>,
+) -> Result<(), String> {
+    let mut project = state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    for eid in &element_ids {
+        if let Some(elem) = find_element_deep_mut(project.active_elements_mut(), eid) {
+            elem.common_mut().overlay = None;
+        }
+    }
+
+    project.bump_version();
+    drop(project);
+
+    let mut cache = cache_state.lock().map_err(|e| AppError::LockError(e.to_string()))?;
+    cache.invalidate_cache();
+    Ok(())
 }

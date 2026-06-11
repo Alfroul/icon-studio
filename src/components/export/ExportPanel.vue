@@ -4,11 +4,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { useExportStore, PNG_SIZES } from "@/stores/export";
 import { useUiStore } from "@/stores/ui";
 import { useProjectStore } from "@/stores/project";
+import { useVariantsStore } from "@/stores/variantsStore";
 import AppIcon from "@/components/common/AppIcon.vue";
 
 const store = useExportStore();
 const ui = useUiStore();
 const project = useProjectStore();
+const variantsStore = useVariantsStore();
 
 // Code export settings
 const codeFormat = ref<string>('reactTs');
@@ -18,10 +20,24 @@ const codePreview = ref<string>('');
 const codePreviewVisible = ref(false);
 
 const CODE_FORMATS = [
-  { value: 'reactTs', label: 'React TS', ext: '.tsx' },
-  { value: 'vueTs', label: 'Vue TS', ext: '.vue' },
-  { value: 'swiftUI', label: 'SwiftUI', ext: '.swift' },
-  { value: 'flutter', label: 'Flutter', ext: '.dart' },
+  { group: 'Web', formats: [
+    { value: 'reactTs', label: 'React TS', ext: '.tsx' },
+    { value: 'vueTs', label: 'Vue TS', ext: '.vue' },
+    { value: 'svelte', label: 'Svelte', ext: '.svelte' },
+    { value: 'svgSymbol', label: 'SVG Symbol', ext: '.svg' },
+    { value: 'svgMinified', label: 'SVG Minified', ext: '.min.svg' },
+  ]},
+  { group: 'Mobile', formats: [
+    { value: 'swiftUI', label: 'SwiftUI', ext: '.swift' },
+    { value: 'flutter', label: 'Flutter', ext: '.dart' },
+  ]},
+  { group: 'Desktop', formats: [
+    { value: 'xaml', label: 'XAML', ext: '.xaml' },
+    { value: 'cpp', label: 'C++', ext: '.hpp' },
+  ]},
+  { group: 'Android', formats: [
+    { value: 'vectorDrawable', label: 'VectorDrawable', ext: '.xml' },
+  ]},
 ];
 
 async function generateCodePreview() {
@@ -387,6 +403,216 @@ async function handleExportGif() {
 
 loadPresets();
 
+// Variant export settings
+const exportVariants = ref(false);
+const selectedVariantIndices = ref<number[]>([]);
+
+// Weight variants
+const weightVisible = ref(false);
+const selectedWeights = ref<string[]>(['thin', 'light', 'regular', 'medium', 'bold', 'fill']);
+const weightResults = ref<Array<{ weight: string; svg: string }>>([]);
+const weightGenerating = ref(false);
+
+const WEIGHT_OPTIONS = [
+  { value: 'thin', label: 'Thin', factor: '0.5x' },
+  { value: 'light', label: 'Light', factor: '0.75x' },
+  { value: 'regular', label: 'Regular', factor: '1.0x' },
+  { value: 'medium', label: 'Medium', factor: '1.25x' },
+  { value: 'bold', label: 'Bold', factor: '1.5x' },
+  { value: 'fill', label: 'Fill', factor: 'stroke→fill' },
+];
+
+function toggleWeight(w: string) {
+  const idx = selectedWeights.value.indexOf(w);
+  if (idx >= 0) selectedWeights.value.splice(idx, 1);
+  else selectedWeights.value.push(w);
+}
+
+async function handleGenerateWeightVariants() {
+  if (selectedWeights.value.length === 0) {
+    ui.showToast('Select at least one weight', 'warning');
+    return;
+  }
+  weightGenerating.value = true;
+  try {
+    weightResults.value = await store.generateWeightVariants(selectedWeights.value);
+    if (weightResults.value.length === 0) {
+      ui.showToast('No variants generated', 'warning');
+    }
+  } finally {
+    weightGenerating.value = false;
+  }
+}
+
+function svgThumb(svg: string): string {
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+
+async function exportAllWeightVariants() {
+  if (weightResults.value.length === 0) return;
+  for (const v of weightResults.value) {
+    const blob = new Blob([v.svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `icon-${v.weight}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  ui.showToast(`Exported ${weightResults.value.length} weight variant(s)`, 'success');
+}
+
+// Favicon snippet
+const faviconAppName = ref('My App');
+const faviconSnippetText = ref('');
+const faviconSnippetVisible = ref(false);
+
+// Sprite Sheet
+const spriteSheetVisible = ref(false);
+const SPRITE_SIZES = [16, 24, 32, 48, 64];
+const spriteSheetSize = ref(24);
+const spriteSheetLayout = ref<'horizontal' | 'grid'>('horizontal');
+const spriteSheetColumns = ref(4);
+const spriteSheetPadding = ref(0);
+const spriteSheetResult = ref<import('@/types').SpriteSheetResult | null>(null);
+
+const spriteSheetJsonPreview = computed(() => {
+  if (!spriteSheetResult.value) return '';
+  return JSON.stringify(spriteSheetResult.value.icons, null, 2);
+});
+
+async function handleExportSpriteSheet() {
+  if (!store.outputDir) {
+    ui.showToast("Please select an output directory first", "warning");
+    return;
+  }
+  const cols = spriteSheetLayout.value === 'horizontal' ? 0 : spriteSheetColumns.value;
+  const result = await store.exportSpriteSheet(
+    `${store.outputDir}/sprite-sheet.png`,
+    cols,
+    spriteSheetSize.value,
+    spriteSheetPadding.value,
+  );
+  if (result) {
+    spriteSheetResult.value = result;
+    ui.showToast(`Sprite sheet: ${result.total_width}×${result.total_height}`, 'success');
+  }
+}
+
+// All-platforms export
+const showAllPlatformsModal = ref(false);
+const allPlatformsAppName = ref('My App');
+const allPlatformsThemeColor = ref('#000000');
+const allPlatformsBgColor = ref('#FFFFFF');
+
+async function loadFaviconSnippet() {
+  if (faviconSnippetText.value) return;
+  faviconSnippetText.value = await store.getFaviconHtmlSnippet(faviconAppName.value);
+}
+
+async function refreshFaviconSnippet() {
+  faviconSnippetText.value = await store.getFaviconHtmlSnippet(faviconAppName.value);
+}
+
+async function copyFaviconSnippet() {
+  await loadFaviconSnippet();
+  if (faviconSnippetText.value) {
+    try {
+      await navigator.clipboard.writeText(faviconSnippetText.value);
+      ui.showToast('HTML snippet copied to clipboard', 'success');
+    } catch (e: unknown) {
+      ui.showToast(`Failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    }
+  }
+}
+
+function toggleVariantExport() {
+  exportVariants.value = !exportVariants.value;
+  if (exportVariants.value && selectedVariantIndices.value.length === 0) {
+    // Select all by default
+    selectedVariantIndices.value = variantsStore.variants.map((_, i) => i);
+  }
+}
+
+function toggleVariantIndex(idx: number) {
+  const i = selectedVariantIndices.value.indexOf(idx);
+  if (i >= 0) selectedVariantIndices.value.splice(i, 1);
+  else selectedVariantIndices.value.push(idx);
+}
+
+async function handleExportSelectedVariants() {
+  if (!store.outputDir) {
+    ui.showToast("Please select an output directory first", "warning");
+    return;
+  }
+  store.exporting = true;
+  store.error = null;
+  try {
+    let allPaths: string[] = [];
+    for (const idx of selectedVariantIndices.value) {
+      const paths = await variantsStore.exportVariant(idx, "svg", store.outputDir);
+      allPaths = allPaths.concat(paths);
+    }
+    store.exportResults = allPaths;
+    ui.showToast(`Exported ${allPaths.length} variant file(s)`, "success");
+  } catch (e: unknown) {
+    store.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    store.exporting = false;
+  }
+}
+
+async function handlePwaIcons() {
+  if (!store.outputDir) {
+    ui.showToast("Please select an output directory first", "warning");
+    return;
+  }
+  store.exporting = true;
+  store.error = null;
+  try {
+    const paths = await store.exportPwaIcons(
+      store.outputDir,
+      faviconAppName.value,
+      '#000000',
+      '#FFFFFF',
+    );
+    store.exportResults = paths;
+    ui.showToast(`Exported ${paths.length} PWA file(s)`, 'success');
+  } catch (e: unknown) {
+    store.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    store.exporting = false;
+  }
+}
+
+async function handleAllPlatformsExport() {
+  if (!store.outputDir) {
+    ui.showToast("Please select an output directory first", "warning");
+    showAllPlatformsModal.value = false;
+    return;
+  }
+  showAllPlatformsModal.value = false;
+  store.exporting = true;
+  store.error = null;
+  try {
+    const result = await store.exportAllPlatforms(
+      store.outputDir,
+      allPlatformsAppName.value,
+      allPlatformsThemeColor.value,
+      allPlatformsBgColor.value,
+    );
+    if (result) {
+      const total = result.ios_paths.length + result.android_paths.length + result.pwa_paths.length + result.favicon_paths.length;
+      store.exportResults = [...result.ios_paths, ...result.android_paths, ...result.pwa_paths, ...result.favicon_paths];
+      ui.showToast(`Exported ${total} files across all platforms`, 'success');
+    }
+  } catch (e: unknown) {
+    store.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    store.exporting = false;
+  }
+}
+
 </script>
 
 <template>
@@ -478,7 +704,7 @@ loadPresets();
         <label class="checkbox-row code-toggle" @click.prevent="codePreviewVisible = !codePreviewVisible">
           <input type="checkbox" :checked="codePreviewVisible" @click.prevent />
           <span class="checkbox-label">Code</span>
-          <span class="tag">React / Vue / Swift / Flutter</span>
+          <span class="tag">10 formats</span>
         </label>
 
         <div v-if="codePreviewVisible" class="code-export-section">
@@ -489,7 +715,9 @@ loadPresets();
           <div class="code-field">
             <label class="code-label">Format</label>
             <select v-model="codeFormat" class="code-select">
-              <option v-for="fmt in CODE_FORMATS" :key="fmt.value" :value="fmt.value">{{ fmt.label }} ({{ fmt.ext }})</option>
+              <optgroup v-for="group in CODE_FORMATS" :key="group.group" :label="group.group">
+                <option v-for="fmt in group.formats" :key="fmt.value" :value="fmt.value">{{ fmt.label }} ({{ fmt.ext }})</option>
+              </optgroup>
             </select>
           </div>
           <label class="checkbox-row code-option">
@@ -655,6 +883,121 @@ loadPresets();
       </div>
     </div>
 
+    <!-- Variant Export -->
+    <div v-if="variantsStore.variants.length > 0" class="section">
+      <label class="checkbox-row" @click.prevent="toggleVariantExport">
+        <input type="checkbox" :checked="exportVariants" @click.prevent />
+        <span class="checkbox-label">Export Variants</span>
+        <span class="tag">{{ variantsStore.variants.length }} variant(s)</span>
+      </label>
+      <div v-if="exportVariants" class="variant-export-list">
+        <div v-for="(v, idx) in variantsStore.variants" :key="idx" class="variant-export-row">
+          <label class="checkbox-row compact">
+            <input
+              type="checkbox"
+              :checked="selectedVariantIndices.includes(idx)"
+              @change="toggleVariantIndex(idx)"
+            />
+            <span class="checkbox-label">{{ v.name }}</span>
+            <span class="tag">icon.{{ v.name.toLowerCase().replace(/\s+/g, '-') }}.svg</span>
+          </label>
+        </div>
+        <button class="action-btn" @click="handleExportSelectedVariants" :disabled="store.exporting || selectedVariantIndices.length === 0">
+          Export Selected Variants
+        </button>
+      </div>
+    </div>
+
+    <!-- Weight Variants -->
+    <div class="section">
+      <label class="checkbox-row" @click.prevent="weightVisible = !weightVisible">
+        <input type="checkbox" :checked="weightVisible" @click.prevent />
+        <span class="checkbox-label">Weight Variants</span>
+        <span class="tag">6 weights</span>
+      </label>
+      <div v-if="weightVisible" class="code-export-section">
+        <div class="weight-chips">
+          <label
+            v-for="w in WEIGHT_OPTIONS"
+            :key="w.value"
+            :class="['size-chip', { active: selectedWeights.includes(w.value) }]"
+            @click="toggleWeight(w.value)"
+          >
+            {{ w.label }}
+          </label>
+        </div>
+        <div class="code-actions">
+          <button class="action-btn" @click="handleGenerateWeightVariants" :disabled="weightGenerating || selectedWeights.length === 0">
+            {{ weightGenerating ? 'Generating...' : 'Generate Variants' }}
+          </button>
+        </div>
+        <div v-if="weightResults.length > 0" class="weight-results">
+          <div class="weight-results-grid">
+            <div v-for="v in weightResults" :key="v.weight" class="weight-result-item">
+              <div class="preview-frame weight-preview">
+                <img :src="svgThumb(v.svg)" style="width: 48px; height: 48px" />
+              </div>
+              <span class="preview-label">{{ v.weight }}</span>
+            </div>
+          </div>
+          <button class="action-btn" @click="exportAllWeightVariants" style="margin-top: 6px">
+            Export All
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sprite Sheet -->
+    <div class="section">
+      <label class="checkbox-row" @click.prevent="spriteSheetVisible = !spriteSheetVisible">
+        <input type="checkbox" :checked="spriteSheetVisible" @click.prevent />
+        <span class="checkbox-label">Sprite Sheet</span>
+        <span class="tag">Image Strip</span>
+      </label>
+      <div v-if="spriteSheetVisible" class="code-export-section">
+        <div class="code-field">
+          <label class="code-label">Icon Size</label>
+          <div class="size-chips">
+            <label
+              v-for="s in SPRITE_SIZES"
+              :key="s"
+              :class="['size-chip', { active: spriteSheetSize === s }]"
+              @click="spriteSheetSize = s"
+            >
+              {{ s }}
+            </label>
+          </div>
+        </div>
+        <div class="code-field">
+          <label class="code-label">Layout</label>
+          <select v-model="spriteSheetLayout" class="code-select">
+            <option value="horizontal">Horizontal (1 row)</option>
+            <option value="grid">Grid (columns)</option>
+          </select>
+        </div>
+        <div v-if="spriteSheetLayout === 'grid'" class="code-field">
+          <label class="code-label">Columns</label>
+          <input v-model.number="spriteSheetColumns" type="number" min="1" max="64" class="code-input" style="width:60px;flex:none" />
+        </div>
+        <div class="code-field">
+          <label class="code-label">Padding</label>
+          <input v-model.number="spriteSheetPadding" type="number" min="0" max="32" class="code-input" style="width:60px;flex:none" />
+          <span class="setting-label">px</span>
+        </div>
+        <div class="code-actions">
+          <button class="action-btn" @click="handleExportSpriteSheet" :disabled="store.exporting">
+            Export Sprite Sheet
+          </button>
+        </div>
+        <div v-if="spriteSheetResult" class="code-preview">
+          <pre><code>{{ spriteSheetResult.image_path }} ({{ spriteSheetResult.total_width }}×{{ spriteSheetResult.total_height }})
+
+icons.json:
+{{ spriteSheetJsonPreview }}</code></pre>
+        </div>
+      </div>
+    </div>
+
     <!-- App 图标打包 -->
     <div class="section">
       <div class="section-label">App 图标打包</div>
@@ -676,6 +1019,80 @@ loadPresets();
           iOS 图标
         </button>
       </div>
+      <div class="app-icon-buttons" style="margin-top: 6px">
+        <button
+          class="pack-btn"
+          :disabled="store.exporting"
+          @click="handlePwaIcons"
+        >
+          <span class="pack-icon"><AppIcon name="globe" :size="16" /></span>
+          PWA
+        </button>
+        <button
+          class="pack-btn"
+          :disabled="store.exporting"
+          @click="showAllPlatformsModal = true"
+        >
+          <span class="pack-icon"><AppIcon name="layers" :size="16" /></span>
+          全平台
+        </button>
+      </div>
+    </div>
+
+    <!-- All Platforms Modal -->
+    <div v-if="showAllPlatformsModal" class="modal-overlay" @click.self="showAllPlatformsModal = false">
+      <div class="modal-content">
+        <div class="modal-header">全平台导出配置</div>
+        <div class="modal-body">
+          <div class="code-field">
+            <label class="code-label">App Name</label>
+            <input v-model="allPlatformsAppName" class="code-input" placeholder="My App" />
+          </div>
+          <div class="code-field">
+            <label class="code-label">Theme Color</label>
+            <input v-model="allPlatformsThemeColor" class="code-input" placeholder="#000000" />
+          </div>
+          <div class="code-field">
+            <label class="code-label">Background</label>
+            <input v-model="allPlatformsBgColor" class="code-input" placeholder="#FFFFFF" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="action-btn" @click="showAllPlatformsModal = false">取消</button>
+          <button class="action-btn" style="background: var(--accent); color: var(--bg-primary); border-color: var(--accent)" @click="handleAllPlatformsExport" :disabled="store.exporting">导出</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Favicon HTML Snippet -->
+    <div class="section">
+      <label class="checkbox-row" @click.prevent="faviconSnippetVisible = !faviconSnippetVisible">
+        <input type="checkbox" :checked="faviconSnippetVisible" @click.prevent />
+        <span class="checkbox-label">Favicon HTML Snippet</span>
+        <span class="tag">Copy &amp; paste</span>
+      </label>
+      <div v-if="faviconSnippetVisible" class="code-export-section">
+        <div class="code-field">
+          <label class="code-label">App Name</label>
+          <input v-model="faviconAppName" class="code-input" placeholder="My App" @input="refreshFaviconSnippet" />
+        </div>
+        <div class="code-actions">
+          <button class="action-btn" @click="loadFaviconSnippet">Preview</button>
+          <button class="action-btn" @click="copyFaviconSnippet">Copy to Clipboard</button>
+        </div>
+        <div v-if="faviconSnippetText" class="code-preview">
+          <pre><code>{{ faviconSnippetText }}</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pixel Snap Option -->
+    <div class="section">
+      <label class="checkbox-row">
+        <input type="checkbox" v-model="store.pixelSnap" />
+        <span class="checkbox-label">Pixel Snap</span>
+        <span class="tag">≤32px</span>
+      </label>
     </div>
 
     <!-- 操作 -->
@@ -1332,5 +1749,97 @@ loadPresets();
   font-family: "JetBrains Mono", monospace;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* Variant export */
+.variant-export-list {
+  margin-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.variant-export-row {
+  display: flex;
+}
+
+.checkbox-row.compact {
+  padding: 3px 4px;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  width: 340px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Weight variants */
+.weight-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.weight-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weight-results-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.weight-result-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.weight-preview {
+  width: 56px;
+  height: 56px;
 }
 </style>

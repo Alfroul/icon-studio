@@ -334,6 +334,7 @@ mod tests {
                 locked: false,
                 visible: true,
                 svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF5733".into(),
@@ -360,6 +361,7 @@ mod tests {
                 locked: false,
                 visible: true,
                 svg_filter: None,
+            overlay: None,
             },
             content: "Hello".into(),
             fill: "#FFFFFF".into(),
@@ -600,6 +602,7 @@ mod tests {
                 locked: false,
                 visible: true,
                 svg_filter: None,
+            overlay: None,
             },
             children: vec![Element::Shape(ShapeElement {
                 common: CommonProps {
@@ -618,6 +621,7 @@ mod tests {
                     locked: false,
                     visible: true,
                     svg_filter: None,
+            overlay: None,
                 },
                 shape_type: shapes::ShapeType::Circle,
                 fill: "#FF0000".into(),

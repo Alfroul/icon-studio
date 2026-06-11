@@ -118,6 +118,8 @@ const canGroup = computed(() => {
   return selected.length >= 2;
 });
 
+const hasMultiSelection = computed(() => ui.selectedElementIds.size >= 2);
+
 const isGroupSelected = computed(() => {
   if (!ui.selectedElementId) return false;
   const el = project.elements.find(e => e.id === ui.selectedElementId);
@@ -179,6 +181,51 @@ async function cleanSelectedSvg() {
     return;
   }
   await project.cleanSvg(project.svgPreview);
+}
+
+// Batch overlay
+const overlayModalOpen = ref(false);
+const overlayKind = ref("add");
+const overlayPosition = ref("bottomRight");
+const overlayColor = ref("#FF0000");
+
+function openOverlayModal() {
+  overlayKind.value = "add";
+  overlayPosition.value = "bottomRight";
+  overlayColor.value = "#FF0000";
+  overlayModalOpen.value = true;
+}
+
+async function applyBatchOverlay() {
+  const ids = project.elements
+    .filter(e => ui.selectedElementIds.has(e.id))
+    .map(e => e.id);
+  if (ids.length === 0) return;
+
+  const overlay = {
+    kind: overlayKind.value,
+    position: overlayPosition.value,
+    color: overlayColor.value,
+    size_ratio: 0.4,
+  };
+
+  for (const id of ids) {
+    project.updateElement(id, { overlay });
+  }
+  overlayModalOpen.value = false;
+  ui.showToast(`Overlay applied to ${ids.length} element(s)`, "success");
+}
+
+async function removeBatchOverlay() {
+  const ids = project.elements
+    .filter(e => ui.selectedElementIds.has(e.id))
+    .map(e => e.id);
+  if (ids.length === 0) return;
+
+  for (const id of ids) {
+    project.updateElement(id, { overlay: null });
+  }
+  ui.showToast(`Overlay removed from ${ids.length} element(s)`, "success");
 }
 </script>
 
@@ -289,6 +336,14 @@ async function cleanSelectedSvg() {
           Ungroup
         </button>
       </div>
+      <div class="footer-row" v-if="hasMultiSelection">
+        <button class="footer-btn" @click="openOverlayModal">
+          + Overlay
+        </button>
+        <button class="footer-btn" @click="removeBatchOverlay">
+          - Overlay
+        </button>
+      </div>
       <button
         class="delete-btn"
         :disabled="!ui.selectedElementId"
@@ -307,6 +362,45 @@ async function cleanSelectedSvg() {
     </div>
 
     <IconBrowser />
+
+    <!-- Batch Overlay Modal -->
+    <div v-if="overlayModalOpen" class="modal-overlay" @click.self="overlayModalOpen = false">
+      <div class="modal-content">
+        <div class="modal-title">Apply Overlay</div>
+        <div class="modal-row">
+          <label class="modal-label">Type</label>
+          <select class="prop-select" v-model="overlayKind">
+            <option value="add">+ Add</option>
+            <option value="remove">- Remove</option>
+            <option value="check">✓ Check</option>
+            <option value="info">i Info</option>
+            <option value="warning">! Warning</option>
+            <option value="error">✕ Error</option>
+            <option value="star">★ Star</option>
+            <option value="lock">🔒 Lock</option>
+            <option value="new">New</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">Position</label>
+          <select class="prop-select" v-model="overlayPosition">
+            <option value="topLeft">Top Left</option>
+            <option value="topRight">Top Right</option>
+            <option value="bottomLeft">Bottom Left</option>
+            <option value="bottomRight">Bottom Right</option>
+          </select>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">Color</label>
+          <input type="color" v-model="overlayColor" class="color-swatch" />
+        </div>
+        <div class="modal-actions">
+          <button class="modal-btn cancel" @click="overlayModalOpen = false">Cancel</button>
+          <button class="modal-btn confirm" @click="applyBatchOverlay">Apply</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -545,5 +639,95 @@ async function cleanSelectedSvg() {
 .delete-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  width: 280px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.modal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.modal-label {
+  width: 52px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast) ease;
+}
+
+.modal-btn.cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.modal-btn.confirm {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.modal-btn:hover {
+  opacity: 0.85;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+.color-swatch::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
 }
 </style>

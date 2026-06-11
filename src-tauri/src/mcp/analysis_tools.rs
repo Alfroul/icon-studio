@@ -36,6 +36,12 @@ pub struct ListIconsParams {
     pub keyword: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct FixConsistencyParams {
+    #[schemars(description = "Element IDs to fix")]
+    pub element_ids: Vec<String>,
+}
+
 #[tool_router(router = analysis_router, vis = "pub")]
 impl IconStudioHandler {
     #[tool(name = "analyze_colors", description = "Analyze color usage: identify primary, secondary, and accent colors")]
@@ -51,7 +57,20 @@ impl IconStudioHandler {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    #[tool(name = "check_consistency", description = "Check design consistency (border radius, stroke width, font size, opacity)")]
+    #[tool(name = "analyze_consistency", description = "Full consistency report: border radius, stroke width, font size, opacity, fill style, proportions, visual center drift")]
+    async fn analyze_consistency_tool(
+        &self,
+    ) -> Result<CallToolResult, ErrorData> {
+        let project = self.project.lock().map_err(state_err)?;
+        let result = analyzer::check_consistency(&project);
+        let json = serde_json::to_string_pretty(&result)
+            .map_err(|e| internal_err(format!("Serialization error: {}", e)))?;
+        drop(project);
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(name = "check_consistency", description = "Check design consistency (border radius, stroke width, font size, opacity, fill style, proportions, visual center drift)")]
     async fn check_consistency_tool(
         &self,
     ) -> Result<CallToolResult, ErrorData> {
@@ -62,6 +81,27 @@ impl IconStudioHandler {
         drop(project);
 
         Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(name = "fix_consistency_issues", description = "Fix consistency issues for specified element IDs by setting deviated properties to mode values")]
+    async fn fix_consistency_issues_tool(
+        &self,
+        Parameters(params): Parameters<FixConsistencyParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let project = self.project.lock().map_err(state_err)?;
+        let fixed = analyzer::fix_consistency_issues(&project, &params.element_ids)
+            .map_err(|e| internal_err(format!("Fix error: {}", e)))?;
+        drop(project);
+
+        let mut guard = self.project.lock().map_err(state_err)?;
+        *guard = fixed;
+        drop(guard);
+
+        self.emit_change();
+
+        Ok(CallToolResult::success(vec![Content::text(
+            "Consistency issues fixed successfully.".to_string(),
+        )]))
     }
 
     #[tool(name = "suggest_palette", description = "Suggest color palette based on base color and color scheme")]

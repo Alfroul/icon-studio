@@ -14,3 +14,6 @@ pub mod symbols;
 pub mod adaptive;
 pub mod iconset;
 pub mod packs;
+pub mod ai_commands;
+pub mod variant_commands;
+pub mod theme_preset_commands;

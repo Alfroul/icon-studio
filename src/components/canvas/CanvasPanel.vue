@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useProjectStore } from "@/stores/project";
 import { useUiStore } from "@/stores/ui";
+import { useExportStore } from "@/stores/export";
 import type { Gradient } from "@/types";
 
 const store = useProjectStore();
 const ui = useUiStore();
+const exportStore = useExportStore();
+
+const showQuickExport = ref(false);
+const quickExporting = ref(false);
 
 const presets = [
   { label: "16 × 16", w: 16, h: 16 },
@@ -153,6 +160,41 @@ async function applyCanvas() {
 onUnmounted(() => {
   if (debounceTimer) clearTimeout(debounceTimer);
 });
+
+const quickExportProfiles = [
+  { id: "ios", label: "iOS App Icon Pack", icon: "apple" },
+  { id: "android", label: "Android Pack", icon: "android" },
+  { id: "all", label: "All Platforms", icon: "globe" },
+  { id: "svg", label: "SVG Only", icon: "code" },
+  { id: "png", label: "PNG Only", icon: "image" },
+];
+
+async function doQuickExport(profile: string) {
+  let dir = exportStore.outputDir;
+  if (!dir) {
+    const selected = await open({ directory: true, multiple: false });
+    if (!selected) {
+      showQuickExport.value = false;
+      return;
+    }
+    dir = typeof selected === "string" ? selected : selected[0] ?? "";
+    exportStore.outputDir = dir;
+  }
+
+  quickExporting.value = true;
+  try {
+    const paths = await invoke<string[]>("quick_export", {
+      profile,
+      outputDir: dir,
+    });
+    showQuickExport.value = false;
+    ui.showToast(`Exported ${paths.length} file(s) to ${dir}`, "success");
+  } catch (e) {
+    ui.showToast(`Export failed: ${e}`, "error");
+  } finally {
+    quickExporting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -286,6 +328,25 @@ onUnmounted(() => {
       {{ width }} × {{ height }} px
     </div>
 
+    <div class="quick-export-section">
+      <button
+        class="quick-export-btn"
+        @click="showQuickExport = !showQuickExport"
+        :disabled="quickExporting"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        {{ quickExporting ? "Exporting..." : "Quick Export" }}
+      </button>
+      <div v-if="showQuickExport" class="quick-export-dropdown">
+        <button
+          v-for="p in quickExportProfiles"
+          :key="p.id"
+          class="dropdown-item"
+          @click="doQuickExport(p.id)"
+        >{{ p.label }}</button>
+      </div>
+    </div>
+
     <div class="canvas-actions">
       <div class="action-group-label">File</div>
       <button class="file-action-btn" @click="store.openProject()">
@@ -402,6 +463,69 @@ onUnmounted(() => {
   text-align: center;
   padding-top: 4px;
   border-top: 1px solid var(--border-color);
+}
+
+.quick-export-section {
+  position: relative;
+}
+
+.quick-export-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--bg-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.quick-export-btn:hover {
+  background: var(--accent-hover);
+}
+
+.quick-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quick-export-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dropdown-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .canvas-actions {

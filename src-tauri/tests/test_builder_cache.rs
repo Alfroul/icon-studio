@@ -22,6 +22,7 @@ fn project_with_shape() -> IconProject {
                 blend_mode: None,
         clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+        overlay: None,
         },
         shape_type: ShapeType::Circle,
         fill: "#FF0000".into(),

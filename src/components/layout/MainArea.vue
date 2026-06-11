@@ -7,6 +7,7 @@ import SvgPreview from "@/components/canvas/SvgPreview.vue";
 import ElementOverlay from "@/components/canvas/ElementOverlay.vue";
 import PathEditorOverlay from "@/components/canvas/PathEditorOverlay.vue";
 import PathToolbar from "@/components/canvas/PathToolbar.vue";
+import QuickStartOverlay from "@/components/quickstart/QuickStartOverlay.vue";
 import AppIcon from "@/components/common/AppIcon.vue";
 import { serializePath } from "@/composables/usePathEditor";
 
@@ -14,11 +15,13 @@ const project = useProjectStore();
 const ui = useUiStore();
 
 const mainAreaEl = ref<HTMLElement | null>(null);
+const quickstartRef = ref<InstanceType<typeof QuickStartOverlay> | null>(null);
 const viewportW = ref(600);
 const viewportH = ref(600);
 const isPanning = ref(false);
 const panStart = ref({ x: 0, y: 0, panX: 0, panY: 0 });
 const spaceHeld = ref(false);
+const fileDragOver = ref(false);
 
 const PADDING = 80;
 
@@ -99,12 +102,35 @@ function onDragOver(e: DragEvent) {
   if (e.dataTransfer?.types.includes("application/json")) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
+    return;
+  }
+  if (e.dataTransfer?.types.includes("Files")) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    fileDragOver.value = true;
   }
 }
 
 async function onDrop(e: DragEvent) {
   e.preventDefault();
+  fileDragOver.value = false;
   try {
+    // Handle file drops first
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      const validTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+      if (!validTypes.includes(file.type) && !file.name.endsWith(".svg")) {
+        ui.showToast("Unsupported file type. Use PNG, JPG, SVG, or WebP.", "error");
+        return;
+      }
+      if (quickstartRef.value) {
+        await quickstartRef.value.handleImageFile(file);
+      } else {
+        await handleDroppedFile(file);
+      }
+      return;
+    }
+
     const data = e.dataTransfer?.getData("application/json");
     if (!data) return;
     const parsed = JSON.parse(data);
@@ -131,6 +157,55 @@ async function onDrop(e: DragEvent) {
     }
   } catch (err) {
     ui.showToast(`Drop failed: ${err}`, "error");
+  }
+}
+
+async function handleDroppedFile(file: File) {
+  try {
+    if (file.type === "image/svg+xml" || file.name.endsWith(".svg")) {
+      const text = await file.text();
+      await invoke("add_path_from_svg", { svgContent: text });
+    } else {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = dataUrl;
+      });
+      await invoke("add_image_from_data", {
+        imageData: dataUrl,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      });
+    }
+    await project.refreshElements();
+    ui.showToast("Image imported", "success");
+  } catch (e) {
+    ui.showToast(`Import failed: ${e}`, "error");
+  }
+}
+
+function onDragLeave() {
+  fileDragOver.value = false;
+}
+
+async function onPaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) continue;
+      await handleDroppedFile(file);
+      return;
+    }
   }
 }
 
@@ -209,6 +284,7 @@ const cursorStyle = computed(() => {
   <div
     ref="mainAreaEl"
     class="main-area"
+    :class="{ 'file-drag-over': fileDragOver }"
     :style="{ cursor: cursorStyle }"
     @wheel="onWheel"
     @mousedown="onCanvasMouseDown"
@@ -218,6 +294,8 @@ const cursorStyle = computed(() => {
     @dblclick="onDblClick"
     @dragover="onDragOver"
     @drop="onDrop"
+    @dragleave="onDragLeave"
+    @paste="onPaste"
     @keydown="onKeyDown"
     @keyup="onKeyUp"
     tabindex="0"
@@ -267,13 +345,16 @@ const cursorStyle = computed(() => {
 
     <div class="zoom-badge">{{ displayZoom }}%</div>
 
-    <div v-if="!project.svgPreview && project.elements.length === 0" class="empty-state">
-      <AppIcon name="layoutGrid" :size="48" class="empty-icon" />
-      <p>Start by adding elements or choosing a template</p>
-      <button class="btn-link" @click="ui.setPanel('templates')">Browse Templates</button>
-      <button class="btn-link" @click="ui.setPanel('elements')">Add Element</button>
+    <QuickStartOverlay
+      v-if="project.elements.length === 0 && !project.svgPreview"
+      ref="quickstartRef"
+    />
+    <div v-else-if="!project.svgPreview && project.elements.length > 0" class="loading">Loading preview...</div>
+
+    <div v-if="fileDragOver" class="drop-indicator">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Drop image to import</span>
     </div>
-    <div v-else-if="!project.svgPreview" class="loading">Loading preview...</div>
   </div>
 </template>
 
@@ -368,5 +449,22 @@ const cursorStyle = computed(() => {
 .btn-link:hover {
   color: var(--accent-hover);
   text-decoration: underline;
+}
+
+.main-area.file-drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
+
+.drop-indicator {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 13px;
+  pointer-events: none;
+  opacity: 0.8;
 }
 </style>

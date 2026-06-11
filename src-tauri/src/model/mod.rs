@@ -21,6 +21,153 @@ pub use adaptive::*;
 pub use brand::*;
 pub use iconset::*;
 
+// ---- Phase 2 types ----
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OverlayKind {
+    #[default]
+    Add,
+    Remove,
+    Check,
+    Info,
+    Warning,
+    Error,
+    Star,
+    Lock,
+    New,
+    Custom,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OverlayPosition {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    #[default]
+    BottomRight,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Overlay {
+    #[serde(default)]
+    pub kind: OverlayKind,
+    #[serde(default)]
+    pub position: OverlayPosition,
+    #[serde(default = "default_overlay_color")]
+    pub color: Option<String>,
+    #[serde(default = "default_overlay_size")]
+    pub size_ratio: Option<f64>,
+    #[serde(default)]
+    pub offset_x: Option<f64>,
+    #[serde(default)]
+    pub offset_y: Option<f64>,
+    #[serde(default)]
+    pub custom_path: Option<String>,
+}
+
+fn default_overlay_color() -> Option<String> { Some("#FF0000".to_string()) }
+fn default_overlay_size() -> Option<f64> { Some(0.4) }
+
+impl Default for Overlay {
+    fn default() -> Self {
+        Self {
+            kind: OverlayKind::Add,
+            position: OverlayPosition::BottomRight,
+            color: default_overlay_color(),
+            size_ratio: default_overlay_size(),
+            offset_x: None,
+            offset_y: None,
+            custom_path: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ThemeRule {
+    InvertColors,
+    ReplaceColor { from: String, to: String },
+    AdjustOpacity { factor: f64 },
+    Grayscale,
+    Desaturate { factor: f64 },
+    CustomFill { color: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeVariant {
+    pub name: String,
+    #[serde(default)]
+    pub base_page_index: usize,
+    pub rules: Vec<ThemeRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PresetShape {
+    Squircle,
+    Circle,
+    RoundedRect,
+    Square,
+    Hexagon,
+    Shield,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemePreset {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub corner_radius: f64,
+    #[serde(default)]
+    pub padding_ratio: f64,
+    #[serde(default)]
+    pub background: Option<String>,
+    #[serde(default)]
+    pub shadow: Option<Shadow>,
+    pub shape: PresetShape,
+    #[serde(default)]
+    pub preview_svg: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AiProvider {
+    OpenAi,
+    Recraft,
+    Custom,
+    Ollama,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AiTask {
+    TextToIcon,
+    SketchToIcon,
+    StyleTransfer,
+    VaryIcon,
+    RemoveBackground,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IconStyle {
+    Flat,
+    Outline,
+    Duotone,
+    Gradient,
+    ThreeD,
+    Minimal,
+    Cartoon,
+    PixelArt,
+    LineArt,
+    Neon,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IconProject {
     pub schema_version: String,
@@ -45,6 +192,8 @@ pub struct IconProject {
     pub brand_kits: Vec<BrandKit>,
     #[serde(default)]
     pub custom_style_presets: Vec<style_preset::CustomStylePreset>,
+    #[serde(default)]
+    pub theme_variants: Vec<ThemeVariant>,
 }
 
 impl Default for IconProject {
@@ -63,6 +212,7 @@ impl Default for IconProject {
             adaptive: None,
             brand_kits: Vec::new(),
             custom_style_presets: Vec::new(),
+            theme_variants: Vec::new(),
         }
     }
 }
@@ -311,6 +461,8 @@ pub struct CommonProps {
     pub visible: bool,
     #[serde(default)]
     pub svg_filter: Option<filter::SvgFilter>,
+    #[serde(default)]
+    pub overlay: Option<Overlay>,
 }
 
 impl<'de> Deserialize<'de> for CommonProps {
@@ -345,6 +497,8 @@ impl<'de> Deserialize<'de> for CommonProps {
             pub visible: bool,
             #[serde(default)]
             pub svg_filter: Option<filter::SvgFilter>,
+            #[serde(default)]
+            pub overlay: Option<Overlay>,
         }
 
         let h = CommonPropsHelper::deserialize(deserializer)?;
@@ -372,6 +526,7 @@ impl<'de> Deserialize<'de> for CommonProps {
             locked: h.locked,
             visible: h.visible,
             svg_filter: h.svg_filter,
+            overlay: h.overlay,
         })
     }
 }
@@ -507,6 +662,7 @@ impl CommonProps {
             locked: false,
             visible: true,
             svg_filter: None,
+            overlay: None,
         }
     }
 }
@@ -567,7 +723,7 @@ mod tests {
         blend_mode: None,
         clip_element_id: None,
         mask_element_id: None,
-        locked: false, visible: true, svg_filter: None,
+        locked: false, visible: true, svg_filter: None, overlay: None,
         },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -582,7 +738,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
             mask_element_id: None,
-            locked: false, visible: true, svg_filter: None,
+            locked: false, visible: true, svg_filter: None, overlay: None,
             },
             shape_type: shapes::ShapeType::Rect,
             fill: "#00FF00".to_string(),
@@ -629,7 +785,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None,
-        locked: false, visible: true, svg_filter: None,
+        locked: false, visible: true, svg_filter: None, overlay: None,
         },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -644,7 +800,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None,
-        locked: false, visible: true, svg_filter: None,
+        locked: false, visible: true, svg_filter: None, overlay: None,
         },
             children: vec![Element::Shape(child)],
             expanded: true,
@@ -675,7 +831,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None,
-        locked: false, visible: true, svg_filter: None,
+        locked: false, visible: true, svg_filter: None, overlay: None,
         },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -690,7 +846,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None,
-        locked: false, visible: true, svg_filter: None,
+        locked: false, visible: true, svg_filter: None, overlay: None,
         },
             children: vec![Element::Shape(child)],
             expanded: false,
@@ -868,5 +1024,54 @@ mod tests {
 
         assert_eq!(project.pages[0].elements.len(), 1);
         assert!(project.elements.is_empty()); // Legacy should be unchanged
+    }
+
+    // ---- Overlay Tests ----
+
+    #[test]
+    fn test_overlay_default() {
+        let o = Overlay::default();
+        assert!(matches!(o.kind, OverlayKind::Add));
+        assert!(matches!(o.position, OverlayPosition::BottomRight));
+        assert_eq!(o.color.as_deref(), Some("#FF0000"));
+        assert_eq!(o.size_ratio, Some(0.4));
+        assert!(o.custom_path.is_none());
+    }
+
+    #[test]
+    fn test_overlay_serde_roundtrip() {
+        let o = Overlay {
+            kind: OverlayKind::Star,
+            position: OverlayPosition::TopLeft,
+            color: Some("#FFD700".to_string()),
+            size_ratio: Some(0.5),
+            offset_x: Some(5.0),
+            offset_y: Some(-3.0),
+            custom_path: None,
+        };
+        let json = serde_json::to_string(&o).unwrap();
+        let parsed: Overlay = serde_json::from_str(&json).unwrap();
+        assert!(matches!(parsed.kind, OverlayKind::Star));
+        assert!(matches!(parsed.position, OverlayPosition::TopLeft));
+        assert_eq!(parsed.color.as_deref(), Some("#FFD700"));
+    }
+
+    #[test]
+    fn test_overlay_serde_backwards_compat() {
+        // Old overlay JSON without custom_path should still deserialize
+        let json = r##"{"kind":"check","position":"bottomRight","color":"#00FF00","size_ratio":0.3}"##;
+        let parsed: Overlay = serde_json::from_str(json).unwrap();
+        assert!(matches!(parsed.kind, OverlayKind::Check));
+        assert!(parsed.custom_path.is_none());
+    }
+
+    #[test]
+    fn test_overlay_kind_default() {
+        assert!(matches!(OverlayKind::default(), OverlayKind::Add));
+    }
+
+    #[test]
+    fn test_overlay_position_default() {
+        assert!(matches!(OverlayPosition::default(), OverlayPosition::BottomRight));
     }
 }

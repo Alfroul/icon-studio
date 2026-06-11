@@ -69,6 +69,7 @@ describe('useExportStore', () => {
       expect(invoke).toHaveBeenCalledWith('export_png', {
         sizes: [16, 32, 64, 128, 256, 512],
         outputDir: '/out',
+        pixelSnap: null,
       })
     })
 
@@ -82,6 +83,7 @@ describe('useExportStore', () => {
       expect(invoke).toHaveBeenCalledWith('export_png', {
         sizes: [64],
         outputDir: '/out',
+        pixelSnap: null,
       })
     })
   })
@@ -199,6 +201,7 @@ describe('useExportStore', () => {
         outputDir: '/out',
         formats: ['svg', 'png'],
         pngSizes: [32, 64],
+        pixelSnap: null,
       })
     })
   })

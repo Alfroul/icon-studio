@@ -78,6 +78,7 @@ impl Page {
             adaptive: None,
             brand_kits: Vec::new(),
             custom_style_presets: Vec::new(),
+            theme_variants: Vec::new(),
         }
     }
 }

@@ -2,6 +2,7 @@
 import { ref, computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useUiStore } from "@/stores/ui";
+import ConsistencyPanel from "./ConsistencyPanel.vue";
 import type { ColorAnalysis, ConsistencyReport, FindResult } from "@/types";
 
 const ui = useUiStore();
@@ -181,52 +182,8 @@ function selectElement(id: string) {
     </div>
 
     <!-- Consistency Tab -->
-    <div v-if="activeTab === 'consistency'" class="tab-content">
-      <button class="action-btn" :disabled="consistencyLoading" @click="checkConsistency">
-        {{ consistencyLoading ? 'Checking...' : 'Check Consistency' }}
-      </button>
-
-      <div v-if="consistencyError" class="error-msg">{{ consistencyError }}</div>
-
-      <div v-if="consistency" class="consistency-results">
-        <div class="check-grid">
-          <div
-            v-for="check in consistencyChecks"
-            :key="check.label"
-            :class="['check-row', check.pass ? 'check-pass' : 'check-fail']"
-          >
-            <span class="check-indicator">{{ check.pass ? '\u2713' : '\u2717' }}</span>
-            <span class="check-label">{{ check.label }}</span>
-          </div>
-        </div>
-
-        <div v-if="consistency.issues.length" class="section-block">
-          <div class="section-label">Issues ({{ consistency.issues.length }})</div>
-          <div class="issue-list">
-            <div
-              v-for="(issue, i) in consistency.issues"
-              :key="i"
-              class="issue-row"
-            >
-              <span class="issue-id">{{ issue.element_id }}</span>
-              <span class="issue-prop">{{ issue.property }}</span>
-              <span class="issue-values">
-                <span class="issue-expected">{{ issue.expected }}</span>
-                <span class="issue-arrow">&rarr;</span>
-                <span class="issue-actual">{{ issue.actual }}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="!consistency.issues.length" class="all-pass-msg">
-          All consistency checks passed.
-        </div>
-      </div>
-
-      <div v-if="!consistency && !consistencyError && !consistencyLoading" class="empty-hint">
-        Click "Check Consistency" to verify design uniformity across elements.
-      </div>
+    <div v-if="activeTab === 'consistency'" class="tab-content tab-content--no-pad">
+      <ConsistencyPanel />
     </div>
 
     <!-- Find Elements Tab -->
@@ -357,6 +314,10 @@ function selectElement(id: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.tab-content--no-pad {
+  padding: 0;
 }
 
 /* Action Button */

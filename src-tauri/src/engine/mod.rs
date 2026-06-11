@@ -19,3 +19,7 @@ pub mod codegen;
 pub mod tokens;
 pub mod pack_importer;
 pub mod fontgen;
+pub mod ai;
+pub mod theme_presets;
+pub mod variants;
+pub mod weight;

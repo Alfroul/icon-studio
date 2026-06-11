@@ -89,6 +89,7 @@ impl IconStudioHandler {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             children,
             expanded: true,

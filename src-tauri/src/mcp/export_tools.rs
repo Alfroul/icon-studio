@@ -35,6 +35,8 @@ pub struct ExportAllParams {
     pub output_dir: String,
     #[schemars(description = "Export formats (e.g. [\"svg\",\"png\",\"ico\"]). Default: all")]
     pub formats: Option<Vec<String>>,
+    #[schemars(description = "Snap coordinates to pixel grid for small sizes (≤32px)")]
+    pub pixel_snap: Option<bool>,
 }
 
 fn default_app_name() -> String {
@@ -52,6 +54,8 @@ pub struct ExportFaviconParams {
     pub theme_color: Option<String>,
     #[schemars(description = "Background color (hex, for site.webmanifest)")]
     pub background_color: Option<String>,
+    #[schemars(description = "Snap coordinates to pixel grid for small sizes (≤32px)")]
+    pub pixel_snap: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -114,6 +118,13 @@ impl IconStudioHandler {
                 .map_err(|e| internal_err(format!("Build error: {}", e)))?
         };
 
+        let svg_str = if params.pixel_snap.unwrap_or(false) {
+            exporter::snap_to_pixel_grid(&svg_str, 0.5)
+                .map_err(|e| internal_err(format!("Pixel snap error: {}", e)))?
+        } else {
+            svg_str
+        };
+
         let all_paths = crate::services::export::export_all_formats(
             &svg_str, &params.output_dir, &formats, &[16, 32, 64, 128, 256, 512],
         ).map_err(|e| internal_err(format!("Batch export error: {}", e)))?;
@@ -140,7 +151,7 @@ impl IconStudioHandler {
         crate::engine::utils::validate_file_path(&params.output_dir)
             .map_err(invalid_params)?;
         let dir = Path::new(&params.output_dir);
-        let paths = exporter::export_favicon_package(
+        let result = exporter::export_favicon_package(
             &svg_str,
             dir,
             &params.app_name,
@@ -149,15 +160,17 @@ impl IconStudioHandler {
         )
         .map_err(|e| internal_err(format!("Favicon export error: {}", e)))?;
 
-        let file_names: Vec<String> = paths
+        let file_names: Vec<String> = result
+            .paths
             .iter()
             .map(|p| p.file_name().unwrap_or_default().to_string_lossy().into_owned())
             .collect();
 
         Ok(CallToolResult::success(vec![Content::text(format!(
-            "Exported favicon package ({} files):\n{}",
-            paths.len(),
-            file_names.join("\n")
+            "Exported favicon package ({} files):\n{}\n\nHTML snippet:\n{}",
+            result.paths.len(),
+            file_names.join("\n"),
+            result.html_snippet
         ))]))
     }
 
@@ -377,7 +390,7 @@ impl IconStudioHandler {
         ))]))
     }
 
-    #[tool(name = "export_code", description = "Export current icon as framework component code (React TS, Vue TS, SwiftUI, Flutter)")]
+    #[tool(name = "export_code", description = "Export current icon as framework component code (ReactTs, VueTs, SwiftUI, Flutter, Xaml, VectorDrawable, SvgSymbol, SvgMinified, Cpp, Svelte)")]
     async fn export_code(
         &self,
         Parameters(params): Parameters<ExportCodeParams>,
@@ -394,8 +407,14 @@ impl IconStudioHandler {
             "vueTs" => CodeFormat::VueTs,
             "swiftUI" => CodeFormat::SwiftUI,
             "flutter" => CodeFormat::Flutter,
+            "xaml" => CodeFormat::Xaml,
+            "vectorDrawable" => CodeFormat::VectorDrawable,
+            "svgSymbol" => CodeFormat::SvgSymbol,
+            "svgMinified" => CodeFormat::SvgMinified,
+            "cpp" => CodeFormat::Cpp,
+            "svelte" => CodeFormat::Svelte,
             other => return Err(invalid_params(format!(
-                "Unknown format '{}'. Valid: reactTs, vueTs, swiftUI, flutter", other
+                "Unknown format '{}'. Valid: reactTs, vueTs, swiftUI, flutter, xaml, vectorDrawable, svgSymbol, svgMinified, cpp, svelte", other
             ))),
         };
 
@@ -439,6 +458,106 @@ impl IconStudioHandler {
             Content::text(format!("{} ({} bytes)\n\n{}", result.filename, result.content.len(), result.content)),
         ]))
     }
+
+    #[tool(name = "export_pwa_icons", description = "Export PWA manifest icons (192x192, 512x512)")]
+    async fn export_pwa_icons(
+        &self,
+        Parameters(params): Parameters<ExportPwaIconsParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let svg_str = {
+            let project = self.project.lock().map_err(state_err)?;
+            let mut cache = self.cache.lock().map_err(state_err)?;
+            crate::services::export::build_svg(&project, &mut cache)
+                .map_err(|e| internal_err(format!("Build error: {}", e)))?
+        };
+
+        let theme = params.theme_color.as_deref().unwrap_or("#FFFFFF");
+        let bg = params.background_color.as_deref().unwrap_or("#FFFFFF");
+        let paths = exporter::export_pwa_icons(
+            &svg_str,
+            Path::new(&params.output_dir),
+            &params.app_name,
+            theme,
+            bg,
+        )
+        .map_err(|e| internal_err(format!("PWA export error: {}", e)))?;
+
+        let file_names: Vec<String> = paths
+            .iter()
+            .map(|p| p.file_name().unwrap_or_default().to_string_lossy().into_owned())
+            .collect();
+
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "Exported PWA icons ({} files):\n{}",
+            paths.len(),
+            file_names.join("\n")
+        ))]))
+    }
+
+    #[tool(name = "export_all_platforms", description = "Export icons for all platforms (iOS, Android, PWA, Favicon)")]
+    async fn export_all_platforms(
+        &self,
+        Parameters(params): Parameters<ExportAllPlatformsParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let svg_str = {
+            let project = self.project.lock().map_err(state_err)?;
+            let mut cache = self.cache.lock().map_err(state_err)?;
+            crate::services::export::build_svg(&project, &mut cache)
+                .map_err(|e| internal_err(format!("Build error: {}", e)))?
+        };
+
+        let theme = params.theme_color.as_deref().unwrap_or("#FFFFFF");
+        let bg = params.background_color.as_deref().unwrap_or("#FFFFFF");
+        let result = exporter::export_all_platforms(
+            &svg_str,
+            Path::new(&params.output_dir),
+            &params.app_name,
+            theme,
+            bg,
+        )
+        .map_err(|e| internal_err(format!("All-platforms export error: {}", e)))?;
+
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "Exported all platforms:\n  iOS: {} files\n  Android: {} files\n  PWA: {} files\n  Favicon: {} files",
+            result.ios_paths.len(),
+            result.android_paths.len(),
+            result.pwa_paths.len(),
+            result.favicon_paths.len()
+        ))]))
+    }
+
+    #[tool(name = "export_sprite_sheet", description = "Export multiple icons as a sprite sheet image")]
+    async fn export_sprite_sheet(
+        &self,
+        Parameters(params): Parameters<ExportSpriteSheetParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let svg_str = {
+            let project = self.project.lock().map_err(state_err)?;
+            let mut cache = self.cache.lock().map_err(state_err)?;
+            crate::services::export::build_svg(&project, &mut cache)
+                .map_err(|e| internal_err(format!("Build error: {}", e)))?
+        };
+
+        let padding = params.padding.unwrap_or(0);
+        let svgs: &[(&str, &str)] = &[("icon", &svg_str)];
+        let result = exporter::export_sprite_sheet(
+            svgs,
+            params.columns,
+            params.icon_size,
+            padding,
+            Path::new(&params.output_path),
+        )
+        .map_err(|e| internal_err(format!("Sprite sheet export error: {}", e)))?;
+
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "Sprite sheet exported: {}x{}, {} icons\nImage: {}\nicons.json: {}",
+            result.total_width,
+            result.total_height,
+            result.icons.len(),
+            result.image_path.to_string_lossy(),
+            result.icons.len()
+        ))]))
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -462,7 +581,7 @@ fn default_parametrize_fill() -> bool { true }
 pub struct ExportCodeParams {
     #[schemars(description = "Component name in PascalCase (e.g. HomeIcon)")]
     pub component_name: String,
-    #[schemars(description = "Target framework: reactTs, vueTs, swiftUI, flutter")]
+    #[schemars(description = "Target framework: reactTs, vueTs, swiftUI, flutter, xaml, vectorDrawable, svgSymbol, svgMinified, cpp, svelte")]
     pub format: String,
     #[schemars(description = "Default size in pixels")]
     #[serde(default = "default_size")]
@@ -477,3 +596,45 @@ pub struct ExportTokensParams {
     #[schemars(description = "Token format: cssVariables, jsonDtcg, scssVariables, tailwindConfig")]
     pub format: String,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct ExportPwaIconsParams {
+    #[schemars(description = "Output directory for PWA icons")]
+    pub output_dir: String,
+    #[schemars(description = "App name")]
+    #[serde(default = "default_app_name")]
+    pub app_name: String,
+    #[schemars(description = "Theme color (hex)")]
+    pub theme_color: Option<String>,
+    #[schemars(description = "Background color (hex)")]
+    pub background_color: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct ExportAllPlatformsParams {
+    #[schemars(description = "Output directory")]
+    pub output_dir: String,
+    #[schemars(description = "App name")]
+    #[serde(default = "default_app_name")]
+    pub app_name: String,
+    #[schemars(description = "Theme color (hex)")]
+    pub theme_color: Option<String>,
+    #[schemars(description = "Background color (hex)")]
+    pub background_color: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+pub struct ExportSpriteSheetParams {
+    #[schemars(description = "Output image path")]
+    pub output_path: String,
+    #[schemars(description = "Number of columns")]
+    #[serde(default = "default_columns")]
+    pub columns: u32,
+    #[schemars(description = "Icon size in pixels")]
+    #[serde(default = "default_size")]
+    pub icon_size: u32,
+    #[schemars(description = "Padding between icons")]
+    pub padding: Option<u32>,
+}
+
+fn default_columns() -> u32 { 4 }

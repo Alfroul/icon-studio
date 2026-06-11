@@ -30,6 +30,15 @@ export const useSettingsStore = defineStore("settings", () => {
   const autoExportDir = ref(
     localStorage.getItem("iconstudio-auto-export-dir") || ""
   );
+  const aiProvider = ref<string>(
+    localStorage.getItem("iconstudio-ai-provider") || "openAi"
+  );
+  const aiApiKey = ref(
+    localStorage.getItem("iconstudio-ai-api-key") || ""
+  );
+  const aiModel = ref(
+    localStorage.getItem("iconstudio-ai-model") || "gpt-4o"
+  );
 
   function applyTheme(mode: ThemeMode) {
     theme.value = mode;
@@ -79,6 +88,21 @@ export const useSettingsStore = defineStore("settings", () => {
     wsStatus.value = status;
   }
 
+  function setAiProvider(provider: string) {
+    aiProvider.value = provider;
+    localStorage.setItem("iconstudio-ai-provider", provider);
+  }
+
+  function setAiApiKey(key: string) {
+    aiApiKey.value = key;
+    localStorage.setItem("iconstudio-ai-api-key", key);
+  }
+
+  function setAiModel(model: string) {
+    aiModel.value = model;
+    localStorage.setItem("iconstudio-ai-model", model);
+  }
+
   if (typeof window !== "undefined") {
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
     const onMediaChange = () => {
@@ -100,6 +124,9 @@ export const useSettingsStore = defineStore("settings", () => {
     wsStatus,
     autoExportOnClose,
     autoExportDir,
+    aiProvider,
+    aiApiKey,
+    aiModel,
     applyTheme,
     setMcpEnabled,
     setDefaultFont,
@@ -107,5 +134,8 @@ export const useSettingsStore = defineStore("settings", () => {
     setAutoExportOnClose,
     setAutoExportDir,
     setWsStatus,
+    setAiProvider,
+    setAiApiKey,
+    setAiModel,
   };
 });

@@ -14,7 +14,7 @@ fn common_defaults(id: &str) -> CommonProps {
                 animation: None,
         blend_mode: None,
     clip_element_id: None,
-        mask_element_id: None, locked: false, visible: true, svg_filter: None,
+        mask_element_id: None, locked: false, visible: true, svg_filter: None, overlay: None,
         }
 }
 
@@ -94,7 +94,7 @@ pub fn make_text(id: &str, content: &str) -> TextElement {
                 animation: None,
         blend_mode: None,
         clip_element_id: None,
-        mask_element_id: None, locked: false, visible: true, svg_filter: None,
+        mask_element_id: None, locked: false, visible: true, svg_filter: None, overlay: None,
         },
         content: content.to_string(),
         fill: "#000000".to_string(),
@@ -143,7 +143,7 @@ pub fn make_icon(id: &str, name: &str) -> IconElement {
                 animation: None,
         blend_mode: None,
         clip_element_id: None,
-        mask_element_id: None, locked: false, visible: true, svg_filter: None,
+        mask_element_id: None, locked: false, visible: true, svg_filter: None, overlay: None,
         },
         name: name.to_string(),
         fill: "#000000".to_string(),
@@ -171,7 +171,7 @@ pub fn make_image(id: &str, data: &str) -> ImageElement {
                 animation: None,
         blend_mode: None,
         clip_element_id: None,
-        mask_element_id: None, locked: false, visible: true, svg_filter: None,
+        mask_element_id: None, locked: false, visible: true, svg_filter: None, overlay: None,
         },
         data: data.to_string(),
     }
@@ -195,7 +195,7 @@ pub fn make_path(id: &str, d: &str) -> PathElement {
                 animation: None,
         blend_mode: None,
         clip_element_id: None,
-        mask_element_id: None, locked: false, visible: true, svg_filter: None,
+        mask_element_id: None, locked: false, visible: true, svg_filter: None, overlay: None,
         },
         d: d.to_string(),
         fill: "#000000".to_string(),

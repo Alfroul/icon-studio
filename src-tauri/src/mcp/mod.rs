@@ -16,6 +16,9 @@ mod brand_tools;
 mod iconset_tools;
 mod lottie_tools;
 mod pack_tools;
+mod ai_tools;
+mod overlay_tools;
+mod variant_tools;
 
 pub use core::*;
 pub use elements_tools::*;
@@ -35,6 +38,9 @@ pub use brand_tools::*;
 pub use iconset_tools::*;
 pub use lottie_tools::*;
 pub use pack_tools::*;
+pub use ai_tools::*;
+pub use overlay_tools::*;
+pub use variant_tools::*;
 
 use rmcp::{
     ServerHandler,
@@ -97,6 +103,9 @@ impl IconStudioHandler {
         full.merge(Self::iconset_router());
         full.merge(Self::lottie_router());
         full.merge(Self::pack_router());
+        full.merge(Self::ai_router());
+        full.merge(Self::overlay_router());
+        full.merge(Self::variant_router());
         Self {
             project,
             cache,

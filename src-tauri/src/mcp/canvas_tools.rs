@@ -950,6 +950,7 @@ impl IconStudioHandler {
                 locked: shape.common.locked,
                 visible: shape.common.visible,
                 svg_filter: shape.common.svg_filter.clone(),
+                overlay: shape.common.overlay.clone(),
             },
             d,
             fill: shape.fill.clone(),

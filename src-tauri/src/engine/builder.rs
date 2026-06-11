@@ -84,6 +84,11 @@ pub fn build(project: &IconProject) -> Result<String, AppError> {
 
     collect_clip_mask_defs(elements, elements, &mut defs);
 
+    let has_overlay = elements.iter().any(|e| e.common().visible && e.common().overlay.is_some());
+    if has_overlay {
+        defs.push_str(r#"<filter id="ov-shadow"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.3"/></filter>"#);
+    }
+
     if !defs.is_empty() {
         svg.push_str(&format!("<defs>{}</defs>", defs));
     }
@@ -287,7 +292,123 @@ fn render_element(elem: &Element, symbols: &std::collections::HashMap<String, cr
         result
     };
 
+    let result = if let Some(ref overlay) = elem.common().overlay {
+        format!("{}{}", result, render_overlay(elem.common(), overlay))
+    } else {
+        result
+    };
+
     Ok(result)
+}
+
+fn render_overlay(common: &crate::model::CommonProps, overlay: &crate::model::Overlay) -> String {
+    use crate::model::OverlayPosition;
+
+    let size_ratio = overlay.size_ratio.unwrap_or(0.4);
+    let r = (common.width.min(common.height) * size_ratio) / 2.0;
+    let r = r.max(4.0);
+
+    let (cx, cy) = match overlay.position {
+        OverlayPosition::TopLeft => (common.x + r, common.y + r),
+        OverlayPosition::TopRight => (common.x + common.width - r, common.y + r),
+        OverlayPosition::BottomLeft => (common.x + r, common.y + common.height - r),
+        OverlayPosition::BottomRight => (common.x + common.width - r, common.y + common.height - r),
+    };
+
+    let color = overlay.color.as_deref().unwrap_or("#FF0000");
+    let symbol = overlay_kind_svg(&overlay.kind, r);
+
+    format!(
+        r#"<g class="overlay" transform="translate({cx:.2},{cy:.2})" filter="url(#ov-shadow)"><circle cx="0" cy="0" r="{r:.2}" fill="{color}" stroke="white" stroke-width="{sw:.1}"/>{symbol}</g>"#,
+        cx = cx, cy = cy, r = r, color = escape_xml_attr(color),
+        sw = (r * 0.1).clamp(1.0, 2.0),
+        symbol = symbol,
+    )
+}
+
+fn overlay_kind_svg(kind: &crate::model::OverlayKind, r: f64) -> String {
+    use crate::model::OverlayKind;
+    let s = r * 0.55;
+    let white = "white";
+    match kind {
+        OverlayKind::Add => format!(
+            r#"<line x1="{cx:.2}" y1="{cy1:.2}" x2="{cx:.2}" y2="{cy2:.2}" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/><line x1="{cx1:.2}" y1="{cy:.2}" x2="{cx2:.2}" y2="{cy:.2}" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/>"#,
+            cx = 0.0, cy1 = -s, cy2 = s, sw = s * 0.35, w = white,
+            cx1 = -s, cx2 = s, cy = 0.0,
+        ),
+        OverlayKind::Remove => format!(
+            r#"<line x1="{x1:.2}" y1="{y1:.2}" x2="{x2:.2}" y2="{y2:.2}" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/><line x1="{x2:.2}" y1="{y1:.2}" x2="{x1:.2}" y2="{y2:.2}" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/>"#,
+            x1 = -s * 0.7, y1 = -s * 0.7, x2 = s * 0.7, y2 = s * 0.7, sw = s * 0.35, w = white,
+        ),
+        OverlayKind::Check => format!(
+            r#"<polyline points="{x1:.2},{y1:.2} {x2:.2},{y2:.2} {x3:.2},{y3:.2}" fill="none" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+            x1 = -s * 0.5, y1 = 0.0,
+            x2 = -s * 0.1, y2 = s * 0.5,
+            x3 = s * 0.5, y3 = -s * 0.4,
+            sw = s * 0.35, w = white,
+        ),
+        OverlayKind::Info => {
+            let dot_r = s * 0.12;
+            format!(
+                r#"<circle cx="0" cy="{dy:.2}" r="{dot_r:.2}" fill="{w}"/><line x1="0" y1="{ly1:.2}" x2="0" y2="{ly2:.2}" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/>"#,
+                dy = -s * 0.45, dot_r = dot_r, w = white,
+                ly1 = -s * 0.15, ly2 = s * 0.5, sw = s * 0.3,
+            )
+        }
+        OverlayKind::Warning => {
+            let t = -s * 0.5;
+            let br = s * 0.5;
+            let neg_br = -s * 0.5;
+            format!(
+                r#"<polygon points="0,{t:.2} {r:.2},{b:.2} {nr:.2},{b:.2}" fill="{w}"/><line x1="0" y1="{ly1:.2}" x2="0" y2="{ly2:.2}" stroke="{color}" stroke-width="{sw:.1}" stroke-linecap="round"/>"#,
+                t = t, r = br, b = br, nr = neg_br,
+                ly1 = -s * 0.15, ly2 = s * 0.2, sw = s * 0.25,
+                color = "#333333", w = white,
+            )
+        }
+        OverlayKind::Error => format!(
+            r#"<line x1="{x1:.2}" y1="{y1:.2}" x2="{x2:.2}" y2="{y2:.2}" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/><line x1="{x2:.2}" y1="{y1:.2}" x2="{x1:.2}" y2="{y2:.2}" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/>"#,
+            x1 = -s * 0.55, y1 = -s * 0.55, x2 = s * 0.55, y2 = s * 0.55, sw = s * 0.35, w = white,
+        ),
+        OverlayKind::Star => {
+            let outer = s * 0.55;
+            let inner = s * 0.22;
+            let mut pts = Vec::new();
+            for i in 0..5 {
+                let a_out = (i as f64 * 72.0 - 90.0).to_radians();
+                pts.push(format!("{:.2},{:.2}", outer * a_out.cos(), outer * a_out.sin()));
+                let a_in = ((i as f64 * 72.0 + 36.0) - 90.0).to_radians();
+                pts.push(format!("{:.2},{:.2}", inner * a_in.cos(), inner * a_in.sin()));
+            }
+            format!(r#"<polygon points="{}" fill="{}"/>"#, pts.join(" "), white)
+        }
+        OverlayKind::Lock => {
+            let lx = -s * 0.3;
+            let rx = s * 0.3;
+            let top = -s * 0.35;
+            let bot = s * 0.0;
+            let bw = s * 0.7;
+            let bh = s * 0.45;
+            let rr = s * 0.08;
+            format!(
+                r#"<path d="M {lx:.2},{bot:.2} V {top:.2} A {rx:.2},{rx:.2} 0 0 1 {rx2:.2},{top:.2} V {bot:.2}" fill="none" stroke="{w}" stroke-width="{sw:.1}" stroke-linecap="round"/><rect x="{bx:.2}" y="0" width="{bw:.2}" height="{bh:.2}" rx="{rr:.2}" fill="{w}"/>"#,
+                lx = lx, bot = bot, top = top,
+                rx = s * 0.3, rx2 = rx, w = white, sw = s * 0.2,
+                bx = -s * 0.35, bw = bw, bh = bh, rr = rr,
+            )
+        }
+        OverlayKind::New => {
+            let tw = s * 0.9;
+            let th = s * 0.5;
+            let fs = s * 0.55;
+            format!(
+                r#"<rect x="{x:.2}" y="{y:.2}" width="{w:.2}" height="{h:.2}" rx="{r:.2}" fill="{c}"/><text x="0" y="{ty:.2}" font-size="{fs:.1}" fill="white" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-weight="700">NEW</text>"#,
+                x = -tw / 2.0, y = -th / 2.0, w = tw, h = th, r = th * 0.25,
+                c = white, ty = 0.0, fs = fs,
+            )
+        }
+        OverlayKind::Custom => String::new(),
+    }
 }
 
 fn wrap_with_animation(svg: &str, anim: &crate::model::Animation, common: &crate::model::CommonProps) -> String {
@@ -725,6 +846,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -751,6 +873,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             content: "Hello".to_string(),
             fill: "#000000".to_string(),
@@ -803,6 +926,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             name: "heart".to_string(),
             fill: "#FF0000".to_string(),
@@ -826,6 +950,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             data: "data:image/png;base64,iVBOR".to_string(),
         }));
@@ -946,6 +1071,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -961,6 +1087,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             shape_type: shapes::ShapeType::Rect,
             fill: "#00FF00".to_string(),
@@ -976,6 +1103,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             children: vec![Element::Shape(child1), Element::Shape(child2)],
             expanded: false,
@@ -1000,6 +1128,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -1015,6 +1144,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             children: vec![Element::Shape(inner_child)],
             expanded: false,
@@ -1028,6 +1158,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             children: vec![Element::Group(inner_group)],
             expanded: false,
@@ -1050,6 +1181,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -1065,6 +1197,7 @@ mod tests {
             blend_mode: None,
             clip_element_id: None,
         mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
         },
             children: vec![Element::Shape(child)],
             expanded: false,
@@ -1142,6 +1275,7 @@ mod tests {
                 blend_mode: None,
                 clip_element_id: None,
                 mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(),
@@ -1173,6 +1307,7 @@ mod tests {
                 blend_mode: None,
                 clip_element_id: None,
                 mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Rect,
             fill: "#FFFFFF".to_string(),
@@ -1210,6 +1345,7 @@ mod tests {
                 x: 0.0, y: 0.0, width: 200.0, height: 200.0,
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: crate::model::shapes::ShapeType::Rect,
             fill: "#FF0000".to_string(), stroke: None, stroke_width: 0.0,
@@ -1221,6 +1357,7 @@ mod tests {
                 x: 100.0, y: 0.0, width: 200.0, height: 200.0,
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None, locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: crate::model::shapes::ShapeType::Rect,
             fill: "#00FF00".to_string(), stroke: None, stroke_width: 0.0,
@@ -1273,6 +1410,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(), stroke: None, stroke_width: 0.0,
@@ -1285,6 +1423,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: false, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Circle,
             fill: "#00FF00".to_string(), stroke: None, stroke_width: 0.0,
@@ -1312,6 +1451,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(), stroke: None, stroke_width: 0.0,
@@ -1326,6 +1466,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Rect,
             fill: "#00FF00".to_string(), stroke: None, stroke_width: 0.0,
@@ -1361,6 +1502,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Circle,
             fill: "#FF0000".to_string(), stroke: None, stroke_width: 0.0,
@@ -1381,6 +1523,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             symbol_id: "symbol-1".to_string(),
             overrides: vec![SymbolOverride {
@@ -1411,6 +1554,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             symbol_id: "nonexistent".to_string(),
             overrides: vec![],
@@ -1435,6 +1579,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             shape_type: shapes::ShapeType::Rect,
             fill: "#FF0000".to_string(), stroke: None, stroke_width: 0.0,
@@ -1455,6 +1600,7 @@ mod tests {
                 opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             symbol_id: "symbol-1".to_string(),
             overrides: vec![],
@@ -1467,6 +1613,7 @@ mod tests {
                 opacity: 0.5, rotation: 0.0, shadows: vec![], animation: None,
                 blend_mode: None, clip_element_id: None, mask_element_id: None,
                 locked: false, visible: true, svg_filter: None,
+            overlay: None,
             },
             symbol_id: "symbol-1".to_string(),
             overrides: vec![SymbolOverride {
@@ -1487,5 +1634,194 @@ mod tests {
         assert!(svg.contains("#FF0000"), "first instance uses source fill");
         assert!(svg.contains("#0000FF"), "second instance uses override fill");
         assert!(svg.contains("opacity=\"0.50\""), "second instance has custom opacity");
+    }
+
+    // ---- Overlay Tests ----
+
+    #[test]
+    fn test_overlay_add_kind() {
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Add,
+            position: crate::model::OverlayPosition::BottomRight,
+            color: Some("#FF0000".to_string()),
+            size_ratio: Some(0.4),
+            offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains("class=\"overlay\""), "should contain overlay group");
+        assert!(svg.contains("<circle"), "should contain overlay circle");
+        assert!(svg.contains("ov-shadow"), "should contain overlay shadow filter");
+    }
+
+    #[test]
+    fn test_overlay_check_kind() {
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Check,
+            position: crate::model::OverlayPosition::TopRight,
+            color: Some("#00FF00".to_string()),
+            size_ratio: Some(0.3),
+            offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains("<polyline"), "Check overlay should contain polyline");
+        assert!(svg.contains("#00FF00"), "should use green color");
+    }
+
+    #[test]
+    fn test_overlay_star_kind() {
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Star,
+            position: crate::model::OverlayPosition::TopLeft,
+            color: Some("#FFD700".to_string()),
+            size_ratio: Some(0.5),
+            offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains("<polygon"), "Star overlay should contain polygon");
+    }
+
+    #[test]
+    fn test_overlay_info_kind() {
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Info,
+            position: crate::model::OverlayPosition::BottomLeft,
+            color: Some("#0000FF".to_string()),
+            size_ratio: Some(0.4),
+            offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains("ov-shadow"), "should contain overlay shadow filter");
+        assert!(svg.contains("<circle"), "Info overlay should contain dot circle");
+    }
+
+    #[test]
+    fn test_overlay_warning_kind() {
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Warning,
+            position: crate::model::OverlayPosition::BottomRight,
+            color: Some("#FFAA00".to_string()),
+            size_ratio: Some(0.4),
+            offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains("<polygon"), "Warning overlay should contain triangle polygon");
+    }
+
+    #[test]
+    fn test_overlay_no_overlay_when_none() {
+        let elem = make_shape();
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(!svg.contains("overlay"), "should not contain overlay when none set");
+    }
+
+    #[test]
+    fn test_overlay_position_top_left() {
+        let mut elem = make_shape();
+        elem.common_mut().x = 100.0;
+        elem.common_mut().y = 100.0;
+        elem.common_mut().width = 200.0;
+        elem.common_mut().height = 200.0;
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Add,
+            position: crate::model::OverlayPosition::TopLeft,
+            color: Some("#FF0000".to_string()),
+            size_ratio: Some(0.4),
+            offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        // TopLeft: cx should be near x+r (left edge), cy near y+r (top edge)
+        assert!(svg.contains("translate("), "should have translate transform");
+    }
+
+    #[test]
+    fn test_overlay_multiple_elements() {
+        let mut project = IconProject::default();
+        let mut shape1 = ShapeElement {
+            common: CommonProps {
+                id: "shape-1".to_string(), x: 0.0, y: 0.0, width: 100.0, height: 100.0,
+                opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
+                blend_mode: None, clip_element_id: None, mask_element_id: None,
+                locked: false, visible: true, svg_filter: None,
+                overlay: Some(crate::model::Overlay {
+                    kind: crate::model::OverlayKind::Add,
+                    position: crate::model::OverlayPosition::BottomRight,
+                    color: Some("#FF0000".to_string()),
+                    size_ratio: Some(0.4), offset_x: None, offset_y: None, custom_path: None,
+                }),
+            },
+            shape_type: shapes::ShapeType::Circle,
+            fill: "#FF0000".to_string(), stroke: None, stroke_width: 0.0,
+            border_radius: 0.0, stroke_dasharray: None, gradient: None,
+        };
+        let shape2 = ShapeElement {
+            common: CommonProps {
+                id: "shape-2".to_string(), x: 200.0, y: 200.0, width: 100.0, height: 100.0,
+                opacity: 1.0, rotation: 0.0, shadows: vec![], animation: None,
+                blend_mode: None, clip_element_id: None, mask_element_id: None,
+                locked: false, visible: true, svg_filter: None, overlay: None,
+            },
+            shape_type: shapes::ShapeType::Rect,
+            fill: "#00FF00".to_string(), stroke: None, stroke_width: 0.0,
+            border_radius: 0.0, stroke_dasharray: None, gradient: None,
+        };
+        project.elements.push(Element::Shape(shape1));
+        project.elements.push(Element::Shape(shape2));
+        project.bump_version();
+
+        let svg = build(&project).unwrap();
+        // Only one overlay should be rendered (shape-1 has it, shape-2 doesn't)
+        let overlay_count = svg.matches("class=\"overlay\"").count();
+        assert_eq!(overlay_count, 1, "should have exactly one overlay");
+    }
+
+    #[test]
+    fn test_overlay_error_lock_new_kinds() {
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Error,
+            position: crate::model::OverlayPosition::TopRight,
+            color: Some("#FF0000".to_string()),
+            size_ratio: Some(0.35), offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains("<line"), "Error overlay should contain lines");
+
+        // Test Lock
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::Lock,
+            position: crate::model::OverlayPosition::BottomLeft,
+            color: Some("#333333".to_string()),
+            size_ratio: Some(0.4), offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains("<path"), "Lock overlay should contain path");
+        assert!(svg.contains("<rect"), "Lock overlay should contain rect");
+
+        // Test New
+        let mut elem = make_shape();
+        elem.common_mut().overlay = Some(crate::model::Overlay {
+            kind: crate::model::OverlayKind::New,
+            position: crate::model::OverlayPosition::BottomRight,
+            color: Some("#0066FF".to_string()),
+            size_ratio: Some(0.45), offset_x: None, offset_y: None, custom_path: None,
+        });
+        let project = make_project_with_element(elem);
+        let svg = build(&project).unwrap();
+        assert!(svg.contains(">NEW<"), "New overlay should contain NEW text");
     }
 }

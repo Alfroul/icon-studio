@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useUiStore } from "@/stores/ui";
 import { useProjectStore } from "@/stores/project";
 import { useExportStore } from "@/stores/export";
-import type { CanvasResult, Element, TextElement } from "@/types";
+import type { CanvasResult, Element, TextElement, ThemePreset } from "@/types";
 
 const ui = useUiStore();
 const project = useProjectStore();
@@ -19,8 +19,10 @@ interface UserTemplate {
   meta: { name: string; description: string; is_builtin: boolean };
 }
 
+const activeTab = ref<"templates" | "presets">("templates");
 const builtinTemplates = ref<BuiltinTemplate[]>([]);
 const userTemplates = ref<UserTemplate[]>([]);
+const themePresets = ref<ThemePreset[]>([]);
 const saving = ref(false);
 const templateName = ref("");
 const showSaveDialog = ref(false);
@@ -35,6 +37,7 @@ async function loadTemplates() {
   try {
     builtinTemplates.value = await invoke<BuiltinTemplate[]>("list_builtin_templates");
     userTemplates.value = await invoke<UserTemplate[]>("list_user_templates_cmd");
+    themePresets.value = await invoke<ThemePreset[]>("list_theme_presets");
   } catch (e) {
     console.error("Failed to load templates:", e);
   } finally {
@@ -103,6 +106,49 @@ async function confirmSave() {
     ui.showToast(`Failed: ${e}`, "error");
   } finally {
     saving.value = false;
+  }
+}
+
+// Theme presets
+const customPresetName = ref("");
+const customPresetShape = ref("squircle");
+const customPresetRadius = ref(10);
+const customPresetBg = ref("#FFFFFF");
+const showCustomPresetDialog = ref(false);
+
+async function applyThemePreset(presetId: string) {
+  try {
+    await invoke("apply_theme_preset", { presetId });
+    await project.refreshElements();
+    ui.showToast("Theme preset applied", "success");
+  } catch (e) {
+    ui.showToast(`Failed: ${e}`, "error");
+  }
+}
+
+function startCustomPreset() {
+  customPresetName.value = "";
+  customPresetShape.value = "squircle";
+  customPresetRadius.value = 10;
+  customPresetBg.value = "#FFFFFF";
+  showCustomPresetDialog.value = true;
+}
+
+async function confirmSaveCustomPreset() {
+  if (!customPresetName.value.trim()) return;
+  try {
+    await invoke("save_custom_theme_preset", {
+      name: customPresetName.value.trim(),
+      shape: customPresetShape.value,
+      cornerRadius: customPresetRadius.value,
+      background: customPresetBg.value,
+      paddingRatio: 0.10,
+    });
+    ui.showToast("Custom preset saved", "success");
+    showCustomPresetDialog.value = false;
+    await loadTemplates();
+  } catch (e) {
+    ui.showToast(`Failed: ${e}`, "error");
   }
 }
 
@@ -179,6 +225,74 @@ async function runBatchGenerate() {
     <div v-if="loading" class="loading">Loading templates...</div>
 
     <template v-else>
+      <div class="tab-bar">
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'templates' }"
+          @click="activeTab = 'templates'"
+        >Templates</button>
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'presets' }"
+          @click="activeTab = 'presets'"
+        >Theme Presets</button>
+      </div>
+
+      <template v-if="activeTab === 'presets'">
+        <div class="section">
+          <div class="section-header">
+            <span>Built-in Presets</span>
+          </div>
+          <div class="template-grid">
+            <div
+              v-for="preset in themePresets"
+              :key="preset.id"
+              class="template-card preset-card"
+              @click="applyThemePreset(preset.id)"
+            >
+              <img
+                v-if="preset.previewSvg"
+                class="template-preview"
+                :src="'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(preset.previewSvg)"
+                :alt="preset.name"
+              />
+              <div v-else class="preset-placeholder">?</div>
+              <div class="template-name">{{ preset.name }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="save-section">
+          <button v-if="!showCustomPresetDialog" class="btn-primary" @click="startCustomPreset">
+            Save Custom Preset
+          </button>
+          <div v-else class="save-dialog">
+            <input
+              v-model="customPresetName"
+              placeholder="Preset name"
+              class="input"
+            />
+            <div class="preset-options-row">
+              <select v-model="customPresetShape" class="input">
+                <option value="squircle">Squircle</option>
+                <option value="circle">Circle</option>
+                <option value="roundedRect">Rounded Rect</option>
+                <option value="square">Square</option>
+                <option value="hexagon">Hexagon</option>
+                <option value="shield">Shield</option>
+              </select>
+              <input type="number" v-model.number="customPresetRadius" class="input" placeholder="Radius %" min="0" max="50" />
+              <input type="color" v-model="customPresetBg" />
+            </div>
+            <div class="save-dialog-actions">
+              <button class="btn-primary" :disabled="!customPresetName.trim()" @click="confirmSaveCustomPreset">Save</button>
+              <button class="btn-secondary" @click="showCustomPresetDialog = false">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
       <div class="section">
         <div class="section-header">
           <span>Built-in Templates</span>
@@ -267,6 +381,7 @@ async function runBatchGenerate() {
           <div v-for="r in batchResults" :key="r" class="batch-result">{{ r }}</div>
         </div>
       </div>
+      </template>
     </template>
   </div>
 </template>
@@ -510,5 +625,77 @@ async function runBatchGenerate() {
 
 .batch-result {
   padding: 2px 0;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  margin-bottom: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.tab-btn:hover:not(.active) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.preset-card {
+  text-align: center;
+}
+
+.preset-placeholder {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+.preset-options-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.preset-options-row select.input {
+  flex: 1;
+}
+
+.preset-options-row input[type="number"] {
+  width: 60px;
+}
+
+.preset-options-row input[type="color"] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
 }
 </style>
